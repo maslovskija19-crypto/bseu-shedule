@@ -3,14 +3,31 @@ const path = require('path');
 const fs = require('fs');
 const iconv = require('iconv-lite');
 const cheerio = require('cheerio');
-const auth = require(path.join((() => {
-  let dir = __dirname;
-  while (dir !== path.parse(dir).root) {
-    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
-    dir = path.dirname(dir);
+function resolveAuthModule() {
+  const candidates = [
+    path.join(__dirname, 'server', 'auth'),
+    path.join(__dirname, '..', 'server', 'auth'),
+    path.join(__dirname, 'auth'),
+    path.join((() => {
+      let dir = __dirname;
+      while (dir !== path.parse(dir).root) {
+        if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+        dir = path.dirname(dir);
+      }
+      return __dirname;
+    })(), 'server', 'auth')
+  ];
+  for (const candidate of candidates) {
+    try {
+      require(candidate);
+      return candidate;
+    } catch (e) {
+      if (e.code !== 'MODULE_NOT_FOUND') throw e;
+    }
   }
-  return __dirname;
-})(), 'server', 'auth'));
+  return path.join(__dirname, 'server', 'auth');
+}
+const auth = require(resolveAuthModule());
 
 const app = express();
 const PORT = process.env.PORT || 3000;
