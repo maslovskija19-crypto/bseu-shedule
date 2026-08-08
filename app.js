@@ -5060,6 +5060,9 @@ card.innerHTML = `
   window.deleteShift = function(shiftId, dateStr) {
     incomeShifts = incomeShifts.filter(s => s.id !== shiftId);
     renderDayShiftsList(dateStr);
+    if (currentPopoverDate && currentPopoverDate === dateStr) {
+      renderPopoverDayShifts(dateStr);
+    }
     saveIncomeData();
   };
   
