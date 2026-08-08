@@ -3,7 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const iconv = require('iconv-lite');
 const cheerio = require('cheerio');
-const auth = require('./server/auth');
+const auth = require(path.join((() => {
+  let dir = __dirname;
+  while (dir !== path.parse(dir).root) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    dir = path.dirname(dir);
+  }
+  return __dirname;
+})(), 'server', 'auth'));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
