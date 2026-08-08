@@ -4070,6 +4070,11 @@ card.innerHTML = `
   const jobRate = document.getElementById("job-rate");
   const jobColor = document.getElementById("job-color");
   const jobsList = document.getElementById("jobs-list");
+  const jobFormTitle = document.getElementById("job-form-title");
+  const jobAddBtn = document.getElementById("job-add-btn");
+  const jobFormActions = document.getElementById("job-form-actions");
+  const jobCancelBtn = document.getElementById("job-cancel-btn");
+  let editingJobId = null; // id работы в режиме редактирования (null = режим добавления)
   
   const shiftModal = document.getElementById("shift-modal");
   const closeShiftModalBtn = document.getElementById("close-shift-modal-btn");
@@ -4948,7 +4953,10 @@ card.innerHTML = `
           <span class="w-2.5 h-2.5 rounded shrink-0" style="background: ${j.color}"></span>
           <span class="text-on-surface-variant dark:text-slate-350 truncate"><strong>${j.name}</strong> — ${j.rate.toFixed(2)} ${j.currency}</span>
         </div>
-        <button onclick="deleteJob('${j.id}')" class="text-on-surface-variant/40 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-450 text-lg font-light px-1 transition-colors cursor-pointer">&times;</button>
+        <div class="flex items-center gap-1 shrink-0">
+          <button type="button" onclick="editJob('${j.id}')" title="Редактировать работу" class="text-on-surface-variant/40 hover:text-primary dark:text-slate-500 dark:hover:text-[#b5bcff] text-base leading-none px-1 transition-colors cursor-pointer"><span class="material-symbols-outlined text-base">edit</span></button>
+          <button onclick="deleteJob('${j.id}')" class="text-on-surface-variant/40 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-450 text-lg font-light px-1 transition-colors cursor-pointer">&times;</button>
+        </div>
       </div>
     `).join('');
   }
@@ -5058,7 +5066,33 @@ card.innerHTML = `
   window.deleteJob = function(id) {
     incomeJobs = incomeJobs.filter(j => j.id !== id);
     incomeShifts = incomeShifts.filter(s => s.jobId !== id);
+    if (editingJobId === id) resetJobForm();
     saveIncomeData();
+  };
+
+  // Сброс формы работы в режим добавления новой работы
+  function resetJobForm() {
+    editingJobId = null;
+    jobForm.reset();
+    jobColor.value = '#98A2F3';
+    jobFormTitle.textContent = 'Добавить новую работу';
+    jobAddBtn.classList.remove('hidden');
+    jobFormActions.classList.add('hidden');
+  }
+
+  // Переключение формы в режим редактирования существующей работы
+  window.editJob = function(id) {
+    const job = incomeJobs.find(j => j.id === id);
+    if (!job) return;
+    editingJobId = id;
+    jobName.value = job.name;
+    jobRate.value = job.rate;
+    jobCurrency.value = job.currency;
+    jobColor.value = job.color;
+    jobFormTitle.textContent = 'Редактировать работу';
+    jobAddBtn.classList.add('hidden');
+    jobFormActions.classList.remove('hidden');
+    jobName.focus();
   };
 
   // Отрисовка списка работ для выбора в модалке смены
@@ -5127,11 +5161,26 @@ card.innerHTML = `
     const rate = parseFloat(jobRate.value);
     const currency = jobCurrency.value;
     const color = jobColor.value;
-    incomeJobs.push({ id: Date.now().toString(), name, rate, currency, color });
-    this.reset(); 
-    jobColor.value = '#98A2F3';
+    if (editingJobId) {
+      const job = incomeJobs.find(j => j.id === editingJobId);
+      if (job) {
+        job.name = name;
+        job.rate = rate;
+        job.currency = currency;
+        job.color = color;
+      }
+      resetJobForm();
+    } else {
+      incomeJobs.push({ id: Date.now().toString(), name, rate, currency, color });
+      this.reset();
+      jobColor.value = '#98A2F3';
+    }
     saveIncomeData();
   });
+
+  if (jobCancelBtn) {
+    jobCancelBtn.addEventListener("click", resetJobForm);
+  }
 
   closeShiftModalBtn.addEventListener("click", closeShiftModal);
 
