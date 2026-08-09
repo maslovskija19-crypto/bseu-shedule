@@ -405,7 +405,7 @@ function getLessonDates(lesson) {
 
 // Итоги пропусков за семестр для текущего расписания группы.
 function computeAbsenceTotals() {
-  const lessons = window.cachedLessons || [];
+  const lessons = getDisplayLessons();
   let validHours = 0, validPairs = 0, invalidHours = 0, invalidPairs = 0;
   lessons.forEach(l => {
     const status = getAttendanceStatus(l);
@@ -568,12 +568,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   const modeExamsBtn = document.getElementById("mode-exams");
   let currentDisplayMode = "days"; // 'days' | 'semester' | 'exams'
   let isDefaultGroupActive = false; // true только когда загружена основная группа по умолчанию
+  let selectedSubgroups = null; // null = все подгруппы активны, Set = только выбранные
+  let availableSubgroups = []; // уникальные подгруппы, найденные в текущем расписании
+  const SUBGROUP_FILTER_KEY = 'bseu_subgroup_filter_v1';
+  selectedSubgroups = loadSelectedSubgroups();
+  let _lastGroupKey = ''; // для сброса фильтра подгрупп при смене группы
   // Данные режима дохода (объявлены здесь, чтобы быть доступными
   // рендеру расписания группы, который может вызываться до блока доходов)
   let incomeJobs = (() => { try { return JSON.parse(localStorage.getItem('jobs')); } catch(e) { return null; } })() || [];
   let incomeShifts = (() => { try { return JSON.parse(localStorage.getItem('shifts')); } catch(e) { return null; } })() || [];
   const getBtn = document.getElementById("get-btn");
   const defaultGroupShowBtn = document.getElementById("default-group-show-btn");
+  const subgroupFilterBtn = document.getElementById("subgroup-filter-btn");
+  const subgroupFilterPopover = document.getElementById("subgroup-filter-popover");
+  const subgroupFilterClose = document.getElementById("subgroup-filter-close");
+  const subgroupFilterList = document.getElementById("subgroup-filter-list");
   
   const groupSelectionDiv = document.getElementById("group-selection");
   const teacherSelectionDiv = document.getElementById("teacher-selection");
@@ -709,6 +718,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       modeSemesterBtn.classList.remove("hidden");
       modeExamsBtn.classList.remove("hidden");
       scheduleToolbar.classList.toggle("hidden", !(window.cachedLessons && window.cachedLessons.length));
+      updateSubgroupFilterButton();
      } else if (tab === "teacher") {
        tabTeacher.className = activeTabClasses;
        tabGroup.className = inactiveTabClasses;
@@ -1047,6 +1057,37 @@ document.addEventListener("DOMContentLoaded", async () => {
       getSchedule();
     });
   }
+
+  if (subgroupFilterBtn) {
+    subgroupFilterBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (subgroupFilterPopover && !subgroupFilterPopover.classList.contains("hidden")) {
+        closeSubgroupFilter();
+      } else {
+        openSubgroupFilter();
+      }
+    });
+  }
+
+  if (subgroupFilterClose) {
+    subgroupFilterClose.addEventListener("click", () => {
+      closeSubgroupFilter();
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    if (subgroupFilterPopover && !subgroupFilterPopover.classList.contains("hidden") &&
+        !subgroupFilterPopover.contains(e.target) &&
+        e.target !== subgroupFilterBtn) {
+      closeSubgroupFilter();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && subgroupFilterPopover && !subgroupFilterPopover.classList.contains("hidden")) {
+      closeSubgroupFilter();
+    }
+  });
 
   // Общий вызов API к нашему чистому бэкенду
   async function apiRequest(action, params = {}) {
@@ -1634,7 +1675,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         if (wrap.classList.contains('hidden')) {
           wrap.classList.remove('hidden');
-          requestAnimationFrame(() => syncOnePicker(picker));
+          requestAnimationFrame(() => {
+            syncOnePicker(picker);
+            // Повторно синхронизируем после применения раскладки, чтобы центральная
+            // лента (ползунок) встала точно на выбранное значение, а «00» не
+            // оставалось подсвеченным без ползунка.
+            requestAnimationFrame(() => syncOnePicker(picker));
+          });
         } else {
           wrap.classList.add('hidden');
         }
@@ -1985,6 +2032,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       
       const selGroupText = getSelectOptionFullText(groupSelect);
       queryTitle = getGroupTitleText();
+      const currentGroupKey = isDefaultGroupActive ? `default:${groupSelect.value}` : `manual:${groupSelect.value}`;
+      if (_lastGroupKey && _lastGroupKey !== currentGroupKey) {
+        resetSubgroupFilter();
+      }
+      _lastGroupKey = currentGroupKey;
       
       saveState = {
         tab: "group",
@@ -2152,6 +2204,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       renderCurrentMode(shouldScroll);
+      updateSubgroupFilterButton();
     } catch (e) {
       // Сервер недоступен — пытаемся показать клиентский кэш (localStorage)
       const cached = loadScheduleCache(saveState.tab, saveState);
@@ -2162,6 +2215,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         window.cachedLessons = data.lessons || [];
 
         renderCurrentMode(shouldScroll);
+        updateSubgroupFilterButton();
         showCacheBanner(cached.savedAt);
       } else {
         showError("Не удалось получить расписание: " + e.message);
@@ -2553,7 +2607,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     dayStripContainer.classList.add("hidden");
     scheduleToolbar.classList.add("hidden");
 
-    const lessons = window.cachedLessons || [];
+    const lessons = getDisplayLessons();
     scheduleContainer.innerHTML = "";
 
     if (lessons.length === 0) {
@@ -2947,7 +3001,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       targetWeekNum = Math.max(1, weekDiff + 1);
     }
     
-    const filtered = (window.cachedLessons || []).filter(l => {
+    const filtered = getDisplayLessons().filter(l => {
       if (l.day.toLowerCase() !== targetDayName) return false;
       const weeks = parseWeeks(l.weeks);
       return weeks.length === 0 || weeks.includes(targetWeekNum);
@@ -3393,7 +3447,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     scheduleToolbar.classList.remove("hidden");
     updateWeekButtonsState();
     
-    const allLessons = window.cachedLessons || [];
+    const allLessons = getDisplayLessons();
     
     const exams = allLessons.filter(l => isExamType(l.type));
     
@@ -3568,6 +3622,129 @@ card.innerHTML = `
     } else {
       defaultGroupShowBtn.classList.add("hidden");
     }
+    updateSubgroupFilterButton();
+  }
+
+  function loadSelectedSubgroups() {
+    try {
+      const raw = localStorage.getItem(SUBGROUP_FILTER_KEY);
+      if (!raw) return null;
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveSelectedSubgroups() {
+    try {
+      if (selectedSubgroups === null) {
+        localStorage.removeItem(SUBGROUP_FILTER_KEY);
+      } else {
+        localStorage.setItem(SUBGROUP_FILTER_KEY, JSON.stringify([...selectedSubgroups]));
+      }
+    } catch (e) {}
+  }
+
+  function resetSubgroupFilter() {
+    selectedSubgroups = null;
+    availableSubgroups = [];
+    saveSelectedSubgroups();
+  }
+
+  function extractSubgroups(lessons) {
+    const subs = new Set();
+    lessons.forEach(l => {
+      const sg = (l.subgroup || '').trim();
+      if (sg) subs.add(sg);
+    });
+    return [...subs].sort((a, b) => a.localeCompare(b, 'ru'));
+  }
+
+  function updateSubgroupFilterButton() {
+    if (!subgroupFilterBtn) return;
+    const isGroupTab = document.getElementById("tab-group").classList.contains("segment-btn-active");
+    const lessons = window.cachedLessons || [];
+    const hasSubgroups = lessons.some(l => l.subgroup && l.subgroup.trim());
+    if (isGroupTab && isDefaultGroupActive && hasSubgroups) {
+      subgroupFilterBtn.classList.remove("hidden");
+    } else {
+      subgroupFilterBtn.classList.add("hidden");
+      closeSubgroupFilter();
+    }
+  }
+
+  function openSubgroupFilter() {
+    if (!subgroupFilterPopover || !subgroupFilterBtn) return;
+    availableSubgroups = extractSubgroups(window.cachedLessons || []);
+    renderSubgroupFilterList();
+    const btnRect = subgroupFilterBtn.getBoundingClientRect();
+    const popoverWidth = 224; // w-56
+    let left = btnRect.left + btnRect.width / 2 - popoverWidth / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - popoverWidth - 8));
+    subgroupFilterPopover.style.top = `${btnRect.bottom + 4}px`;
+    subgroupFilterPopover.style.left = `${left}px`;
+    subgroupFilterBtn.classList.add("bg-primary/10", "dark:bg-[#b5bcff]/15", "border-primary/60", "dark:border-[#b5bcff]/60");
+    subgroupFilterPopover.classList.remove("hidden");
+  }
+
+  function closeSubgroupFilter() {
+    if (subgroupFilterPopover) {
+      subgroupFilterPopover.classList.add("hidden");
+    }
+    if (subgroupFilterBtn) {
+      subgroupFilterBtn.classList.remove("bg-primary/10", "dark:bg-[#b5bcff]/15", "border-primary/60", "dark:border-[#b5bcff]/60");
+    }
+  }
+
+  function renderSubgroupFilterList() {
+    if (!subgroupFilterList) return;
+    subgroupFilterList.innerHTML = '';
+    if (availableSubgroups.length === 0) {
+      subgroupFilterList.innerHTML = '<div class="px-2 py-2 text-xs text-on-surface-variant/60 dark:text-slate-400">Нет подгрупп</div>';
+      return;
+    }
+    availableSubgroups.forEach(sg => {
+      const label = document.createElement('label');
+      label.className = 'flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-container-high dark:hover:bg-slate-800 cursor-pointer transition-colors';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = selectedSubgroups === null ? true : selectedSubgroups.has(sg);
+      checkbox.addEventListener('change', () => {
+        if (selectedSubgroups === null) {
+          selectedSubgroups = new Set(availableSubgroups);
+        }
+        if (checkbox.checked) {
+          selectedSubgroups.add(sg);
+        } else {
+          selectedSubgroups.delete(sg);
+        }
+        saveSelectedSubgroups();
+        applySubgroupFilter();
+      });
+      const text = document.createElement('span');
+      text.className = 'text-sm font-semibold text-on-surface dark:text-slate-200';
+      text.textContent = sg.replace(/^\s*подгр\.?\s*/i, '');
+      label.appendChild(checkbox);
+      label.appendChild(text);
+      subgroupFilterList.appendChild(label);
+    });
+  }
+
+  function getDisplayLessons() {
+    if (!isDefaultGroupActive || selectedSubgroups === null) {
+      return window.cachedLessons || [];
+    }
+    return (window.cachedLessons || []).filter(l => {
+      const sg = (l.subgroup || '').trim();
+      if (!sg) return true;
+      return selectedSubgroups.has(sg);
+    });
+  }
+
+  function applySubgroupFilter() {
+    if (!isDefaultGroupActive) return;
+    renderCurrentMode(false);
   }
 
   function setDefaultGroupActiveState(active) {
@@ -3900,6 +4077,7 @@ card.innerHTML = `
       scheduleTitle.textContent = getGroupTitleText();
       scheduleHeaderRow.classList.remove("hidden");
       renderCurrentMode(false);
+      updateSubgroupFilterButton();
       updateModeButtons();
       refreshAttendanceToggles();
       // Синхронизируем панель недели (setActiveTab переключал ей
@@ -4501,7 +4679,12 @@ card.innerHTML = `
     shiftModal.querySelector("div").classList.remove("scale-95");
     shiftModal.querySelector("div").classList.add("scale-100");
 
-    requestAnimationFrame(syncVerticalTimePicker);
+    requestAnimationFrame(() => {
+      syncVerticalTimePicker();
+      // Повторная синхронизация после применения раскладки модалки,
+      // чтобы ползунок встал точно на значение и «00» не подсвечивалось без него.
+      requestAnimationFrame(syncVerticalTimePicker);
+    });
   }
 
   function closeShiftModal() {
@@ -4548,6 +4731,11 @@ card.innerHTML = `
   function updateVtCol(col, picker) {
     const chips = Array.from(col.querySelectorAll('.vt-chip'));
     if (!chips.length) return;
+    // Принудительно сбрасываем раскладку, чтобы clientHeight/scrollTop
+    // соответствовали фактическому (видимому) положению ленты-ползунка.
+    // Иначе при первом показе колонка может остаться на 00 подсвеченной,
+    // пока ползунок находится на другом значении.
+    void col.offsetHeight;
     const center = col.scrollTop + col.clientHeight / 2;
     let best = chips[0];
     let bestDist = Infinity;
@@ -4562,7 +4750,12 @@ card.innerHTML = `
     if (isHour) hh = parseInt(best.dataset.val, 10);
     else mm = parseInt(best.dataset.val, 10);
     hidden.value = `${pad2(hh)}:${pad2(mm)}`;
-    chips.forEach(c => c.classList.toggle('vt-selected', c === best));
+    chips.forEach(c => {
+      c.classList.remove('vt-selected');
+    });
+    const selectedVal = isHour ? hh : mm;
+    const matchingChip = chips.find(c => Number(c.dataset.val) === selectedVal);
+    if (matchingChip) matchingChip.classList.add('vt-selected');
     const dispId = picker.dataset.display;
     if (dispId) {
       const disp = document.getElementById(dispId);
@@ -4592,8 +4785,16 @@ card.innerHTML = `
 
   function setVtCenter(col, val) {
     if (!col) return;
+    updateVtCol(col, col.closest('.vt-picker')); // сначала снимаем старое выделение по актуальной геометрии
     const chip = col.querySelector(`.vt-chip[data-val="${val}"]`);
-    if (chip) col.scrollTop = chip.offsetTop - col.clientHeight / 2 + chip.offsetHeight / 2;
+    if (chip) {
+      // Гарантируем актуальную геометрию перед расчётом целевой прокрутки
+      void col.offsetHeight;
+      col.scrollTop = chip.offsetTop - col.clientHeight / 2 + chip.offsetHeight / 2;
+      // После установки прокрутки ещё раз пересчитываем выделение,
+      // чтобы «табличка» легла ровно под центральную ленту (ползунок).
+      void col.offsetHeight;
+    }
     updateVtCol(col, col.closest('.vt-picker'));
   }
 
@@ -4753,7 +4954,7 @@ card.innerHTML = `
       let infoLine = '';
       if (hasShifts && inPeriod) {
         const earnInSelected = convertCurrency(totalEarn, incomeJobs.find(j => j.id === dayShifts[0].jobId)?.currency || 'BYN', incomeCurrentCurrency);
-        infoLine = `<div class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 leading-tight truncate">${totalHours.toFixed(1)}ч · ${earnInSelected.toFixed(0)} ${incomeCurrentCurrency}</div>`;
+        infoLine = `<div class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 leading-tight truncate">${totalHours.toFixed(1)}ч · ${earnInSelected.toFixed(2)} ${incomeCurrentCurrency}</div>`;
       } else if (hasLessons && inPeriod) {
         infoLine = `<div class="text-[10px] text-primary/70 dark:text-[#b5bcff]/70 leading-tight truncate">${pluralLessons(dayLessons.length)}</div>`;
       }
