@@ -4199,6 +4199,7 @@ card.innerHTML = `
     updateWeekLabel();
     const newStartDate = getStartOfWeek(currentWeekOffset);
     const newDateISO = formatDateToISO(newStartDate);
+    window.selectedDateISO = newDateISO;
     renderDayStrip(newDateISO);
     // Переключаем расписание для всех режимов кроме аудитории
     const isRoomTab = document.getElementById("tab-room").classList.contains("segment-btn-active");
@@ -4213,6 +4214,7 @@ card.innerHTML = `
     updateWeekLabel();
     const newStartDate = getStartOfWeek(currentWeekOffset);
     const newDateISO = formatDateToISO(newStartDate);
+    window.selectedDateISO = newDateISO;
     renderDayStrip(newDateISO);
     // Переключаем расписание для всех режимов кроме аудитории
     const isRoomTab = document.getElementById("tab-room").classList.contains("segment-btn-active");
@@ -4225,6 +4227,87 @@ card.innerHTML = `
   examsToggle.addEventListener('click', () => {
     setDisplayMode(currentDisplayMode === "exams" ? "days" : "exams");
   });
+
+  // ===== Свайп для переключения дней =====
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTime = 0;
+  const SWIPE_THRESHOLD = 60;
+  const SWIPE_MAX_TIME = 400;
+
+  function handleSwipeEnd(clientX, clientY) {
+    if (!touchStartX || !touchStartY) return;
+    const deltaX = clientX - touchStartX;
+    const deltaY = clientY - touchStartY;
+    const deltaTime = Date.now() - touchStartTime;
+
+    if (Math.abs(deltaX) > Math.abs(deltaY) &&
+        Math.abs(deltaX) > SWIPE_THRESHOLD &&
+        deltaTime < SWIPE_MAX_TIME) {
+      if (window.isInIncomeMode) return;
+
+      const currentDateISO = window.selectedDateISO || formatDateToISO(new Date());
+      const currentDate = new Date(currentDateISO + "T00:00:00");
+      const dayOfWeek = currentDate.getDay();
+      let newDate = new Date(currentDate);
+      let weekOffsetChanged = false;
+
+      if (deltaX < 0) {
+        if (dayOfWeek === 0) {
+          currentWeekOffset++;
+          weekOffsetChanged = true;
+        }
+        newDate.setDate(newDate.getDate() + 1);
+      } else {
+        if (dayOfWeek === 1) {
+          currentWeekOffset--;
+          weekOffsetChanged = true;
+        }
+        newDate.setDate(newDate.getDate() - 1);
+      }
+
+      const newDateISO = formatDateToISO(newDate);
+      window.selectedDateISO = newDateISO;
+
+      if (weekOffsetChanged) {
+        updateWeekLabel();
+      }
+
+      renderDayStrip(newDateISO);
+
+      const isRoomTab = document.getElementById("tab-room").classList.contains("segment-btn-active");
+      if (isRoomTab) {
+        roomDateInput.value = newDateISO;
+        roomDateDisplay.value = formatHumanDate(newDateISO);
+        getSchedule(false);
+      } else {
+        renderLessonsForDate(newDateISO);
+      }
+    }
+
+    touchStartX = 0;
+    touchStartY = 0;
+  }
+
+  function attachSwipeHandlers(el) {
+    if (!el) return;
+    el.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      const target = e.target;
+      if (target.closest("button, a, input, select, textarea, [role=button], .no-swipe")) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchStartTime = Date.now();
+    }, { passive: true });
+
+    el.addEventListener("touchend", (e) => {
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      handleSwipeEnd(touch.clientX, touch.clientY);
+    });
+  }
+
+  attachSwipeHandlers(document.body);
 
   // ==========================================
   // ЛОГИКА РЕЖИМА "УЧЁТ ДОХОДОВ" (INCOME MODE)
