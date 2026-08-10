@@ -323,9 +323,56 @@ function ensureCacheDir() {
 }
 ensureCacheDir();
 
+// ===== Читаемая «подпись» кэш-файла =====
+// Имя файла формируется из понятной метки (что хранится) + короткого хэша,
+// чтобы по имени сразу было видно содержимое и сохранялась уникальность.
+function sanitizeChunk(s, maxLen) {
+  const clean = String(s)
+    .replace(/[\/\\:*?"<>|\x00-\x1f]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, maxLen);
+  return clean || 'x';
+}
+function readableCacheName(key) {
+  try {
+    // list:<action>:<jsonParams> — выпадающие списки (факультеты, формы…)
+    if (key.startsWith('list:')) {
+      const rest = key.slice('list:'.length);
+      const sep = rest.indexOf(':');
+      const action = sep >= 0 ? rest.slice(0, sep) : rest;
+      const paramsRaw = sep >= 0 ? rest.slice(sep + 1) : '';
+      // из "__id.22.main.inpFldsA.GetForms" берём "GetForms"
+      const actionName = (String(action).split('.').pop() || 'list').replace(/\W+/g, '_');
+      let paramsPart = '';
+      try {
+        const p = JSON.parse(paramsRaw);
+        paramsPart = Object.keys(p).map(k => `${k}-${p[k]}`).join('_');
+      } catch (e) { paramsPart = ''; }
+      return `list_${sanitizeChunk(actionName, 40)}${paramsPart ? '_' + sanitizeChunk(paramsPart, 60) : ''}`;
+    }
+    // group:<faculty>:<form>:<course>:<group>
+    if (key.startsWith('group:')) {
+      const p = key.slice('group:'.length).split(':').map(c => sanitizeChunk(c, 40));
+      return 'group_' + p.join('_');
+    }
+    // teacher:<tid>:<taid>:<sid>:<tname>
+    if (key.startsWith('teacher:')) {
+      const p = key.slice('teacher:'.length).split(':');
+      const tname = (p.length >= 4 ? p[3] : '').replace(/\W+/g, '_');
+      return `teacher_${sanitizeChunk(tname, 50)}${p[0] ? '_' + sanitizeChunk(p[0], 30) : ''}`;
+    }
+  } catch (e) { /* ниже запасной вариант */ }
+  return sanitizeChunk(String(key), 80);
+}
+function cacheShortHash(key) {
+  return crypto.createHash('sha1').update(String(key)).digest('hex').slice(0, 10);
+}
 function cacheFilePath(key) {
-  const safe = Buffer.from(key).toString('base64').replace(/[/+=]/g, '_');
-  return path.join(CACHE_DIR, `${CACHE_VERSION}_${safe}.json`);
+  const label = readableCacheName(key);
+  const hash = cacheShortHash(key);
+  return path.join(CACHE_DIR, `${CACHE_VERSION}_${label}_${hash}.json`);
 }
 function fileGetCache(key) {
   try {

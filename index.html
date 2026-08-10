@@ -1464,6 +1464,27 @@
     </div>
   </nav>
 
+  <!-- PWA табличка установки (показывается при первом заходе) -->
+  <div id="pwa-install-banner" class="hidden fixed inset-0 z-[200] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/40 dark:bg-black/50 backdrop-blur-sm" id="pwa-install-backdrop"></div>
+    <div class="relative bg-surface-container-lowest dark:bg-slate-800 border border-outline-variant/15 dark:border-slate-700 rounded-3xl shadow-2xl w-full max-w-sm p-5 sm:p-6 flex flex-col items-center text-center gap-3 sm:gap-4 animate-slide-down">
+      <button id="pwa-install-close" class="absolute top-2.5 right-2.5 text-on-surface-variant dark:text-slate-400 hover:text-on-surface dark:hover:text-slate-200 w-8 h-8 flex items-center justify-center rounded-full hover:bg-on-surface/10 dark:hover:bg-slate-700/50 transition-all cursor-pointer text-lg leading-none" aria-label="Закрыть">&times;</button>
+      <span class="material-symbols-outlined text-primary dark:text-[#b5bcff] text-4xl sm:text-5xl">install_mobile</span>
+      <div>
+        <h3 class="text-base sm:text-lg font-extrabold text-on-surface dark:text-white mb-1">Установить приложение</h3>
+        <p class="text-xs sm:text-sm text-on-surface-variant dark:text-slate-400 leading-relaxed">Добавьте на рабочий стол — работайте быстрее и без браузера.</p>
+      </div>
+      <div class="flex items-center gap-2 w-full">
+        <button id="pwa-install-confirm" class="flex-1 signature-gradient text-on-primary text-sm font-bold py-2.5 rounded-xl shadow-md hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer">
+          Установить
+        </button>
+        <button id="pwa-install-dismiss" class="flex-1 text-sm font-bold text-on-surface-variant dark:text-slate-300 bg-surface-container-low dark:bg-slate-700 hover:bg-surface-container-high dark:hover:bg-slate-600 rounded-xl py-2.5 transition-all cursor-pointer">
+          Позже
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Основной контент -->
   <main class="max-w-[1440px] mx-auto px-3 sm:px-6 md:px-8 flex-grow w-full max-w-full overflow-x-hidden box-border relative">
     <!-- Градиентное свечение на весь фон -->
@@ -1638,7 +1659,7 @@
         <div class="p-2">
           <div class="flex items-center justify-between px-2 py-1.5 mb-1">
             <span class="text-xs font-bold text-on-surface dark:text-white uppercase tracking-wider">Подгруппы</span>
-            <button id="subgroup-filter-close" class="text-on-surface-variant/60 hover:text-on-surface dark:text-slate-400 dark:hover:text-white text-lg font-light leading-none cursor-pointer">&times;</button>
+            <button id="subgroup-filter-close" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-6 h-6 flex items-center justify-center text-lg leading-none cursor-pointer transition-all">&times;</button>
           </div>
           <div id="subgroup-filter-list" class="space-y-0.5"></div>
         </div>
@@ -1652,7 +1673,7 @@
               <span class="material-symbols-outlined text-lg sm:text-xl">event_busy</span>
               <span class="font-headline font-bold text-sm sm:text-base">Учёт пропусков за семестр</span>
             </div>
-            <button id="absence-panel-close" class="text-on-surface-variant/60 hover:text-on-surface dark:text-slate-400 dark:hover:text-white text-xl font-light leading-none cursor-pointer" aria-label="Закрыть">&times;</button>
+            <button id="absence-panel-close" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-7 h-7 flex items-center justify-center text-xl leading-none cursor-pointer transition-all" aria-label="Закрыть">&times;</button>
           </div>
 
           <div class="grid grid-cols-2 gap-2 sm:gap-3 mb-3">
@@ -1851,7 +1872,7 @@
           <span class="material-symbols-outlined text-primary dark:text-[#b5bcff]">settings</span>
           <span>Настройки доходов</span>
         </h2>
-        <button id="close-income-settings-btn" class="text-on-surface-variant/60 hover:text-on-surface dark:text-slate-400 dark:hover:text-white text-xl sm:text-2xl font-light leading-none cursor-pointer">&times;</button>
+         <button id="close-income-settings-btn" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-7 h-7 flex items-center justify-center text-xl sm:text-2xl leading-none cursor-pointer transition-all">&times;</button>
       </div>
       
       <div class="mb-3 sm:mb-4 grid grid-cols-2 gap-2 sm:gap-4">
@@ -1940,7 +1961,7 @@
           <span class="material-symbols-outlined text-primary dark:text-[#b5bcff]">calendar_today</span>
           <span>Смены</span>
         </h3>
-        <button id="close-shift-modal-btn" class="text-on-surface-variant/60 hover:text-on-surface dark:text-slate-400 dark:hover:text-white text-xl sm:text-2xl font-light leading-none cursor-pointer">&times;</button>
+         <button id="close-shift-modal-btn" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-7 h-7 flex items-center justify-center text-xl sm:text-2xl leading-none cursor-pointer transition-all">&times;</button>
       </div>
       
       <div id="current-day-shifts" class="space-y-1.5 sm:space-y-2 max-h-[120px] sm:max-h-[150px] overflow-y-auto no-scrollbar pr-0.5 mb-3 sm:mb-4"></div>
@@ -1995,7 +2016,7 @@
           <span class="material-symbols-outlined text-primary dark:text-[#b5bcff] text-base">schedule</span>
           <span id="popover-date-title">Смена</span>
         </div>
-        <button id="close-time-popover" class="text-on-surface-variant/60 hover:text-on-surface dark:text-slate-400 dark:hover:text-white text-lg font-light leading-none cursor-pointer">&times;</button>
+         <button id="close-time-popover" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-6 h-6 flex items-center justify-center text-lg leading-none cursor-pointer transition-all">&times;</button>
       </div>
 
       <div id="popover-intersection-warning" class="p-2.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center gap-2 mb-2">
@@ -2060,7 +2081,7 @@
           <span class="material-symbols-outlined text-primary dark:text-[#b5bcff] text-base">schedule</span>
           <span id="shift-time-popover-title">Время смены</span>
         </div>
-        <button id="close-shift-time-popover" class="text-on-surface-variant/60 hover:text-on-surface dark:text-slate-400 dark:hover:text-white text-lg font-light leading-none cursor-pointer">&times;</button>
+         <button id="close-shift-time-popover" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-6 h-6 flex items-center justify-center text-lg leading-none cursor-pointer transition-all">&times;</button>
       </div>
 
       <div class="space-y-2">
@@ -2202,7 +2223,7 @@
           <span class="material-symbols-outlined text-amber-600 dark:text-amber-400">assignment</span>
           <span id="homework-modal-title">Домашнее задание</span>
         </h2>
-        <button id="homework-modal-close" class="text-on-surface-variant/60 hover:text-on-surface dark:text-slate-400 dark:hover:text-white text-xl sm:text-2xl font-light leading-none cursor-pointer" aria-label="Закрыть">&times;</button>
+         <button id="homework-modal-close" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-7 h-7 flex items-center justify-center text-xl sm:text-2xl leading-none cursor-pointer transition-all" aria-label="Закрыть">&times;</button>
       </div>
 
       <div id="homework-modal-subject" class="mb-3 sm:mb-4 flex items-start gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/50 rounded-xl px-3 py-2.5">
@@ -2268,7 +2289,7 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 w-full max-w-sm shadow-2xl transition-transform duration-300 scale-95">
       <div class="flex items-center justify-between mb-4">
         <h3 id="account-modal-title" class="text-lg font-extrabold text-on-surface dark:text-white">Вход в аккаунт</h3>
-        <button id="account-modal-close" class="text-on-surface-variant/60 hover:text-on-surface dark:text-slate-400 dark:hover:text-white text-2xl font-light leading-none cursor-pointer" aria-label="Закрыть">&times;</button>
+         <button id="account-modal-close" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-7 h-7 flex items-center justify-center text-2xl leading-none cursor-pointer transition-all" aria-label="Закрыть">&times;</button>
       </div>
       <p class="text-xs sm:text-sm text-on-surface-variant dark:text-slate-400 mb-4 leading-relaxed">
         Аккаунт нужен, чтобы ваши данные (группа, доходы, посещаемость, домашнее задание) синхронизировались между устройствами. Без почты — только логин и пароль.
@@ -2324,22 +2345,22 @@
     </div>
   </div>
 
-  <!-- Модалка предложения создать аккаунт (после первого выбора группы) -->
+  <!-- Модалка предложения установить приложение (после первого выбора группы) -->
   <div id="account-offer-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-3 sm:p-4 hidden transition-opacity duration-300 opacity-0">
     <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 w-full max-w-sm shadow-2xl transition-transform duration-300 scale-95">
       <div class="flex items-center gap-3 mb-3">
-        <span class="material-symbols-outlined text-3xl text-primary dark:text-[#b5bcff]">cloud_sync</span>
-        <h3 class="text-lg font-extrabold text-on-surface dark:text-white">Сохранить данные?</h3>
+        <span class="material-symbols-outlined text-3xl text-primary dark:text-[#b5bcff]">install_mobile</span>
+        <h3 class="text-lg font-extrabold text-on-surface dark:text-white">Установить приложение</h3>
       </div>
       <p class="text-sm text-on-surface-variant dark:text-slate-400 mb-5 leading-relaxed">
-        Создайте аккаунт, чтобы ваши группа, доходы, посещаемость и домашнее задание синхронизировались на всех устройствах. Это займёт несколько секунд и не требует почты.
+        Добавьте на рабочий стол — работайте быстрее и без браузера. Данные останутся на устройстве и не потеряются.
       </p>
       <div class="flex gap-3">
         <button id="account-offer-skip" class="flex-1 px-4 py-2.5 rounded-xl font-semibold text-on-surface-variant dark:text-slate-300 bg-surface-container-low dark:bg-slate-800 hover:bg-surface-container-high dark:hover:bg-slate-700 transition-all cursor-pointer">
-          Пропустить
+          Позже
         </button>
-        <button id="account-offer-create" class="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-primary hover:opacity-90 transition-all cursor-pointer">
-          Создать аккаунт
+        <button id="account-offer-install" class="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-primary hover:opacity-90 transition-all cursor-pointer">
+          Установить
         </button>
       </div>
     </div>

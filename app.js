@@ -4033,10 +4033,11 @@ card.innerHTML = `
     };
     
     localStorage.setItem("bseu_primary_group", JSON.stringify(primaryGroup));
+    groupSelected = true;
     hideFirstTimeModal();
     setActiveTab("group");
     await applyGroupState(primaryGroup);
-    // После первого выбора группы предлагаем создать аккаунт (один раз)
+    // После первого выбора группы предлагаем установить приложение (один раз)
     if (window.AccountSync && typeof window.AccountSync.showOfferIfNeeded === 'function') {
       setTimeout(() => window.AccountSync.showOfferIfNeeded(), 600);
     }
@@ -4059,6 +4060,7 @@ card.innerHTML = `
       return;
     }
     const primaryGroup = JSON.parse(primaryGroupStr);
+    groupSelected = true;
     showPrimaryGroupButton(primaryGroup.groupText);
     setActiveTab("group");
     hideWidget();
@@ -5570,29 +5572,75 @@ window.updateIntersectionAlerts = function() {
 // приложение или не отклонит именно её.
 let deferredInstallPrompt = null;
 const PWA_DISMISSED_KEY = "bseu_pwa_dismissed";
+let groupSelected = false;
 
-// Кнопка «Скачать приложение» всегда видна в меню аккаунта (появляется
-// при нажатии на иконку аккаунта), поэтому show/hide больше не прячут её.
+const installBanner = document.getElementById('pwa-install-banner');
+const installBannerConfirm = document.getElementById('pwa-install-confirm');
+const installBannerDismiss = document.getElementById('pwa-install-dismiss');
+const installBannerClose = document.getElementById('pwa-install-close');
+const installBannerBackdrop = document.getElementById('pwa-install-backdrop');
+
+function showInstallBanner() {
+  if (installBanner) installBanner.classList.remove('hidden');
+}
+
+function hideInstallBanner() {
+  if (installBanner) installBanner.classList.add('hidden');
+}
+
 function showInstallButton() {}
 function hideInstallButton() {}
 
 window.addEventListener('beforeinstallprompt', (e) => {
-  // Браузер хочет показать нативное предложение — перехватываем,
-  // чтобы показать свою кнопку (она не исчезает сама по таймауту,
-  // в отличие от нативного баннера).
   e.preventDefault();
   deferredInstallPrompt = e;
-  // Если пользователь ранее не отклонял именно нашу кнопку — показываем.
   let dismissed = false;
   try { dismissed = localStorage.getItem(PWA_DISMISSED_KEY) === '1'; } catch (err) { /* ignore */ }
-  if (!dismissed) showInstallButton();
+  if (!dismissed && groupSelected) showInstallBanner();
 });
 
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
+  hideInstallBanner();
   hideInstallButton();
   try { localStorage.removeItem(PWA_DISMISSED_KEY); } catch (err) { /* ignore */ }
 });
+
+if (installBannerConfirm) {
+  installBannerConfirm.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const choiceResult = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    if (choiceResult.outcome === 'accepted') {
+      hideInstallBanner();
+    } else {
+      hideInstallBanner();
+      try { localStorage.setItem(PWA_DISMISSED_KEY, '1'); } catch (err) { /* ignore */ }
+    }
+  });
+}
+
+if (installBannerDismiss) {
+  installBannerDismiss.addEventListener('click', () => {
+    hideInstallBanner();
+    try { localStorage.setItem(PWA_DISMISSED_KEY, '1'); } catch (err) { /* ignore */ }
+  });
+}
+
+if (installBannerClose) {
+  installBannerClose.addEventListener('click', () => {
+    hideInstallBanner();
+    try { localStorage.setItem(PWA_DISMISSED_KEY, '1'); } catch (err) { /* ignore */ }
+  });
+}
+
+if (installBannerBackdrop) {
+  installBannerBackdrop.addEventListener('click', () => {
+    hideInstallBanner();
+    try { localStorage.setItem(PWA_DISMISSED_KEY, '1'); } catch (err) { /* ignore */ }
+  });
+}
 
 const installBtn = document.getElementById('account-menu-install');
 if (installBtn) {
@@ -5605,10 +5653,10 @@ if (installBtn) {
     const choiceResult = await deferredInstallPrompt.userChoice;
     deferredInstallPrompt = null;
     if (choiceResult.outcome === 'accepted') {
+      hideInstallBanner();
       hideInstallButton();
     } else {
-      // Пользователь отклонил нашу кнопку — скрываем до следующего
-      // beforeinstallprompt, чтобы не «доставать».
+      hideInstallBanner();
       hideInstallButton();
       try { localStorage.setItem(PWA_DISMISSED_KEY, '1'); } catch (err) { /* ignore */ }
     }
@@ -5648,7 +5696,7 @@ if (installBtn) {
 
   const offerModal = document.getElementById('account-offer-modal');
   const offerSkip = document.getElementById('account-offer-skip');
-  const offerCreate = document.getElementById('account-offer-create');
+  const offerInstall = document.getElementById('account-offer-install');
 
   // Состояние текущего пользователя (null = не авторизован)
   let currentUser = null; // { login }
@@ -5924,13 +5972,12 @@ if (installBtn) {
     refreshMenu();
   }
 
-  // --- Показ предложения создать аккаунт (один раз) ---
+  // --- Показ предложения установить приложение (один раз) ---
   function showOfferIfNeeded() {
     try {
       if (localStorage.getItem(ACCOUNT_OFFER_SHOWN_KEY) === '1') return;
     } catch (e) { /* ignore */ }
     if (currentUser) {
-      // Уже авторизован — помечаем, чтобы больше не предлагать
       try { localStorage.setItem(ACCOUNT_OFFER_SHOWN_KEY, '1'); } catch (e) {}
       return;
     }
@@ -6092,15 +6139,19 @@ if (installBtn) {
     });
   }
 
-  // --- Модалка предложения ---
+  // --- Модалка предложения установки ---
   if (offerSkip) offerSkip.addEventListener('click', () => {
     try { localStorage.setItem(ACCOUNT_OFFER_SHOWN_KEY, '1'); } catch (e) {}
     closeModal(offerModal);
   });
-  if (offerCreate) offerCreate.addEventListener('click', () => {
+  if (offerInstall) offerInstall.addEventListener('click', async () => {
     try { localStorage.setItem(ACCOUNT_OFFER_SHOWN_KEY, '1'); } catch (e) {}
     closeModal(offerModal);
-    openAccountModal(true);
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+    }
   });
 
   // Запускаем проверку сессии при загрузке
