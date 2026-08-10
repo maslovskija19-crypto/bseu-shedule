@@ -1360,7 +1360,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                   <span class="text-sm font-semibold text-on-surface-variant/60 dark:text-slate-400">${escapeHtml(end)}</span>
                 </div>
                  <div class="flex-1 flex flex-col min-w-0">
-                  <div class="flex flex-wrap items-center gap-2 mb-2 lesson-meta-row">
+                  <div class="flex flex-wrap items-center gap-2 mb-2 lesson-meta-row pr-12">
                     ${typeBadge}
                      <span class="text-primary dark:text-[#b5bcff] font-bold text-xs md:text-sm flex items-center gap-1">
                        <span class="material-symbols-outlined text-base">location_on</span>
@@ -2444,7 +2444,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                   <span class="text-sm font-semibold text-on-surface-variant/60 dark:text-slate-400">${endTime}</span>
                 </div>
                <div class="flex-1 flex flex-col min-w-0">
-                 <div class="flex flex-wrap items-center gap-2 mb-2 lesson-meta-row">
+                  <div class="flex flex-wrap items-center gap-2 mb-2 lesson-meta-row pr-12">
                   ${typeBadge}
                   ${subgroupBadge}
                   <span class="text-primary dark:text-[#b5bcff] font-bold text-xs md:text-sm flex items-center gap-1">
@@ -4229,21 +4229,44 @@ card.innerHTML = `
   });
 
   // ===== Свайп для переключения дней =====
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchStartTime = 0;
-  const SWIPE_THRESHOLD = 60;
-  const SWIPE_MAX_TIME = 400;
+  let swipeState = null;
 
-  function handleSwipeEnd(clientX, clientY) {
-    if (!touchStartX || !touchStartY) return;
-    const deltaX = clientX - touchStartX;
-    const deltaY = clientY - touchStartY;
-    const deltaTime = Date.now() - touchStartTime;
+  document.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) return;
+    const target = e.target;
+    if (target.closest("button, a, input, select, textarea, [role=button], .no-swipe")) return;
+    swipeState = {
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+      startTime: Date.now()
+    };
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (!swipeState) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const deltaX = Math.abs(touch.clientX - swipeState.startX);
+    const deltaY = Math.abs(touch.clientY - swipeState.startY);
+    if (deltaX > 40 && deltaX > deltaY) {
+      swipeState.locked = true;
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  document.addEventListener("touchend", (e) => {
+    if (!swipeState) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    const deltaX = touch.clientX - swipeState.startX;
+    const deltaY = touch.clientY - swipeState.startY;
+    const deltaTime = Date.now() - swipeState.startTime;
+    swipeState = null;
 
     if (Math.abs(deltaX) > Math.abs(deltaY) &&
-        Math.abs(deltaX) > SWIPE_THRESHOLD &&
-        deltaTime < SWIPE_MAX_TIME) {
+        Math.abs(deltaX) > 60 &&
+        deltaTime < 400) {
       if (window.isInIncomeMode) return;
 
       const currentDateISO = window.selectedDateISO || formatDateToISO(new Date());
@@ -4284,30 +4307,7 @@ card.innerHTML = `
         renderLessonsForDate(newDateISO);
       }
     }
-
-    touchStartX = 0;
-    touchStartY = 0;
-  }
-
-  function attachSwipeHandlers(el) {
-    if (!el) return;
-    el.addEventListener("touchstart", (e) => {
-      if (e.touches.length !== 1) return;
-      const target = e.target;
-      if (target.closest("button, a, input, select, textarea, [role=button], .no-swipe")) return;
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-      touchStartTime = Date.now();
-    }, { passive: true });
-
-    el.addEventListener("touchend", (e) => {
-      const touch = e.changedTouches[0];
-      if (!touch) return;
-      handleSwipeEnd(touch.clientX, touch.clientY);
-    });
-  }
-
-  attachSwipeHandlers(document.body);
+  });
 
   // ==========================================
   // ЛОГИКА РЕЖИМА "УЧЁТ ДОХОДОВ" (INCOME MODE)
