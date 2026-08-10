@@ -6,6 +6,23 @@ const cheerio = require('cheerio');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const cron = require('node-cron');
+
+const PARSER_LOG_FILE = path.join(__dirname, 'parser.log');
+function logParser(msg, level = 'INFO') {
+  const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const formatted = `[${timestamp}] [${level}] ${msg}`;
+  console.log(formatted);
+  try {
+    fs.appendFileSync(PARSER_LOG_FILE, formatted + '\n', 'utf-8');
+  } catch (e) {
+    console.error('[Logger] Failed to write to parser.log:', e.message);
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 const DB_PATH = path.join(__dirname, 'app.db');
 const db = new Database(DB_PATH);
@@ -666,11 +683,12 @@ function parseScheduleHtml(html) {
   return { semesterStartDate, currentSemesterWeek, lessons };
 }
 
+const GROUP_CACHE_TTL = 3 * 60 * 1000; // 3 минуты TTL для расписания группы
+
 async function getScheduleWithCache(cacheKey, bodyString) {
   const cached = fileGetCache(cacheKey);
   const now = Date.now();
-  const cacheTTL = 2 * 60 * 60 * 1000;
-  if (cached && (now - cached.updatedAt < cacheTTL)) return { ...cached.value, isFallback: false };
+  if (cached && (now - cached.updatedAt < GROUP_CACHE_TTL)) return { ...cached.value, isFallback: false };
   try {
     const response = await fetchWithRetry("https://bseu.by/schedule/", {
       method: "POST",
@@ -687,7 +705,7 @@ async function getScheduleWithCache(cacheKey, bodyString) {
     fileSetCache(cacheKey, parsedData);
     return { ...parsedData, isFallback: false };
   } catch (error) {
-    console.error(`[BSEU Schedule] Failed for ${cacheKey}:`, error);
+    logParser(`[Group Schedule] Failed to fetch for ${cacheKey}: ${error.message}. Returning cached fallback if available.`, 'WARN');
     if (cached) return { ...cached.value, isFallback: true, savedAt: cached.updatedAt };
     throw error;
   }
@@ -711,29 +729,52 @@ let fullScheduleStartedAt = 0;
 let audienceScheduleCache = {};
 let audienceScheduleUpdatedAt = 0;
 
-// --- Загрузка кэша из файла (если есть) ---
+// --- Загрузка кэша и метки времени из файлов ---
 const CACHE_FILE = path.join(__dirname, 'fullScheduleCache.json');
+const LAST_FULL_UPDATE_FILE = path.join(__dirname, 'last_full_update.txt');
+
+function getLastFullUpdateTimestamp() {
+  try {
+    if (fs.existsSync(LAST_FULL_UPDATE_FILE)) {
+      const raw = fs.readFileSync(LAST_FULL_UPDATE_FILE, 'utf-8').trim();
+      const ts = parseInt(raw, 10);
+      if (!isNaN(ts) && ts > 0) return ts;
+    }
+  } catch (e) {}
+  return fullScheduleUpdatedAt || 0;
+}
+
+function setLastFullUpdateTimestamp(ts) {
+  fullScheduleUpdatedAt = ts;
+  try {
+    fs.writeFileSync(LAST_FULL_UPDATE_FILE, String(ts), 'utf-8');
+  } catch (e) {}
+}
+
 try {
   if (fs.existsSync(CACHE_FILE)) {
     const cachedData = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
     fullScheduleCache = cachedData.fullScheduleCache || null;
-    fullScheduleUpdatedAt = cachedData.updatedAt || 0;
+    fullScheduleUpdatedAt = cachedData.updatedAt || getLastFullUpdateTimestamp();
     audienceScheduleCache = cachedData.audienceScheduleCache || {};
     audienceScheduleUpdatedAt = cachedData.audienceScheduleUpdatedAt || 0;
-    console.log('[Cache] Загружен кэш из файла:', CACHE_FILE);
+    logParser(`[Cache] Loaded cache from file: ${CACHE_FILE} (${fullScheduleCache ? fullScheduleCache.length : 0} items)`);
   }
 } catch (e) {
-  console.warn('[Cache] Не удалось загрузить кэш из файла:', e.message);
+  logParser(`[Cache] Could not load cache file: ${e.message}`, 'WARN');
 }
 
 async function getFacultyGroups(faculty) {
+  await sleep(150 + Math.floor(Math.random() * 100));
   const forms = await fetchBseuList("__id.22.main.inpFldsA.GetForms", { faculty });
   if (!Array.isArray(forms)) return [];
   let groups = [];
   for (const f of forms) {
+    await sleep(150 + Math.floor(Math.random() * 100));
     const courses = await fetchBseuList("__id.23.main.inpFldsA.GetCourse", { faculty, form: f.value });
     if (!Array.isArray(courses)) continue;
     for (const c of courses) {
+      await sleep(150 + Math.floor(Math.random() * 100));
       const gs = await fetchBseuList("__id.23.main.inpFldsA.GetGroups", { faculty, form: f.value, course: c.value });
       if (!Array.isArray(gs)) continue;
       for (const g of gs) groups.push({ faculty, form: f.value, course: c.value, group: g.value, groupText: g.text });
@@ -864,54 +905,58 @@ async function buildFullSchedule() {
   fullScheduleError = null;
   fullScheduleStartedAt = Date.now();
   fullSchedulePromise = (async () => {
-    console.log('[FullSchedule] Начинаем сборку полной копии расписания...');
+    logParser('[FullSchedule] Starting complete university schedule background crawl...', 'INFO');
     const t0 = Date.now();
     let allGroups = [];
     try {
-      // Используем Promise.allSettled чтобы не упасть на одном факультете
-      const groupResults = await Promise.allSettled(BSEU_FACULTIES.map(fac =>
-        getFacultyGroups(fac).catch(e => { console.warn(`[FullSchedule] Факультет ${fac}: ${e.message}`); return []; })
-      ));
-      groupResults.forEach(result => {
-        if (result.status === 'fulfilled' && Array.isArray(result.value)) {
-          allGroups = allGroups.concat(result.value);
-        }
-      });
-    } catch (e) {
-      console.warn('[FullSchedule] Ошибка при сборе групп:', e.message);
-    }
-
-    const CONCURRENCY = 15; // Уменьшаем concurrency с 30 до 15
-    const all = [];
-    const fetched = [];
-    // Собираем только если есть группы
-    if (allGroups.length > 0) {
-      for (let i = 0; i < allGroups.length; i += CONCURRENCY) {
-        const batch = allGroups.slice(i, i + CONCURRENCY);
-        const results = await Promise.allSettled(batch.map(async (g) => {
-          try {
-            const body = `__act=__id.25.main.inpFldsA.GetSchedule__sp.7.results__fp.4.main&faculty=${g.faculty}&form=${g.form}&course=${g.course}&group=${g.group}&period=3`;
-            const gkey = `group:${g.faculty}:${g.form}:${g.course}:${g.group}`;
-            const sched = await getScheduleWithCache(gkey, body);
-            return { sched, g };
-          } catch (e) { return null; }
-        }));
-        for (const r of results) {
-          if (r.status !== 'fulfilled' || !r.value) continue;
-          fetched.push(r.value);
-        }
-        // Небольшая задержка между батчами, чтобы не загружать сервер BSEU
-        if (i + CONCURRENCY < allGroups.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+      for (const fac of BSEU_FACULTIES) {
+        try {
+          const gList = await getFacultyGroups(fac);
+          allGroups = allGroups.concat(gList);
+        } catch (e) {
+          logParser(`[FullSchedule] Faculty ${fac} group list error: ${e.message}`, 'WARN');
         }
       }
+    } catch (e) {
+      logParser(`[FullSchedule] Error collecting groups: ${e.message}`, 'WARN');
     }
 
-    // Каноническая дата начала семестра — самая частая (мода) среди всех групп.
-    // Защищает от рассинхрона: если у части групп BSEU вернул старт семестра,
-    // сдвинутый на неделю (см. ветку «Текущая - N учебная неделя» в
-    // parseScheduleHtml на сервере в UTC), все пары кэша получат единую,
-    // корректную дату старта и не «уедут» на неделю относительно других групп.
+    if (allGroups.length === 0) {
+      logParser('[FullSchedule] Failed to fetch groups (BSEU website unavailable or down). Preserving existing cache untouched.', 'WARN');
+      fullScheduleBuilding = false;
+      return fullScheduleCache;
+    }
+
+    const CONCURRENCY = 5;
+    const all = [];
+    const fetched = [];
+    const newAudienceCache = {};
+
+    for (let i = 0; i < allGroups.length; i += CONCURRENCY) {
+      const batch = allGroups.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(batch.map(async (g) => {
+        try {
+          await sleep(150 + Math.floor(Math.random() * 100));
+          const body = `__act=__id.25.main.inpFldsA.GetSchedule__sp.7.results__fp.4.main&faculty=${g.faculty}&form=${g.form}&course=${g.course}&group=${g.group}&period=3`;
+          const gkey = `group:${g.faculty}:${g.form}:${g.course}:${g.group}`;
+          const sched = await getScheduleWithCache(gkey, body);
+          return { sched, g };
+        } catch (e) { return null; }
+      }));
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value) {
+          fetched.push(r.value);
+        }
+      }
+      await sleep(200);
+    }
+
+    if (fetched.length === 0) {
+      logParser('[FullSchedule] No group schedules retrieved from BSEU. Preserving existing cache untouched.', 'WARN');
+      fullScheduleBuilding = false;
+      return fullScheduleCache;
+    }
+
     const semCount = {};
     for (const { sched } of fetched) {
       const s = sched.semesterStartDate;
@@ -940,7 +985,6 @@ async function buildFullSchedule() {
         if (!allValid) continue;
         const [start, end] = String(l.time || '').split(/[-–]/).map(s => s.trim());
 
-        // Если несколько аудиторий и нет подгруппы - создаём отдельные записи для каждой аудитории
         if (roomParts.length > 1 && !l.subgroup) {
           for (const singleRoom of roomParts) {
             const entry = {
@@ -956,10 +1000,8 @@ async function buildFullSchedule() {
               subgroup: l.subgroup || ''
             };
             all.push(entry);
-            if (!audienceScheduleCache[singleRoom]) {
-              audienceScheduleCache[singleRoom] = [];
-            }
-            audienceScheduleCache[singleRoom].push(entry);
+            if (!newAudienceCache[singleRoom]) newAudienceCache[singleRoom] = [];
+            newAudienceCache[singleRoom].push(entry);
           }
         } else {
           const entry = {
@@ -976,63 +1018,67 @@ async function buildFullSchedule() {
           };
           all.push(entry);
           if (l.room) {
-            if (!audienceScheduleCache[l.room]) {
-              audienceScheduleCache[l.room] = [];
-            }
-            audienceScheduleCache[l.room].push(entry);
+            if (!newAudienceCache[l.room]) newAudienceCache[l.room] = [];
+            newAudienceCache[l.room].push(entry);
+          }
         }
       }
     }
-  }
 
-  // === Сверка с предыдущей копией расписания ===
-  const newSignature = scheduleSignature(all);
-  const oldSignature = scheduleSignature(fullScheduleCache);
-  const changed = !fullScheduleCache || newSignature !== oldSignature;
+    const newSignature = scheduleSignature(all);
+    const oldSignature = scheduleSignature(fullScheduleCache);
+    const changed = !fullScheduleCache || newSignature !== oldSignature;
+    const finishTime = Date.now();
+    const durationSec = ((finishTime - t0) / 1000).toFixed(1);
 
-  if (changed) {
-    fullScheduleCache = all;
-    fullScheduleUpdatedAt = Date.now();
-    fullScheduleError = null;
-    try {
-      fs.writeFileSync(CACHE_FILE, JSON.stringify({
-        fullScheduleCache,
-        audienceScheduleCache,
-        updatedAt: fullScheduleUpdatedAt,
-        audienceScheduleUpdatedAt
-      }, null, 2));
-      console.log('[Cache] Расписание изменилось — кэш обновлён и сохранён в файл:', CACHE_FILE);
-    } catch (e) {
-      console.warn('[Cache] Не удалось сохранить кэш в файл:', e.message);
+    if (changed) {
+      fullScheduleCache = all;
+      audienceScheduleCache = newAudienceCache;
+      audienceScheduleUpdatedAt = finishTime;
+      setLastFullUpdateTimestamp(finishTime);
+      fullScheduleError = null;
+      try {
+        fs.writeFileSync(CACHE_FILE, JSON.stringify({
+          fullScheduleCache,
+          audienceScheduleCache,
+          updatedAt: fullScheduleUpdatedAt,
+          audienceScheduleUpdatedAt
+        }, null, 2));
+        logParser(`[FullSchedule] Cache UPDATED and saved to file: ${all.length} lessons, ${fetched.length}/${allGroups.length} groups in ${durationSec}s. Changes: YES`, 'INFO');
+      } catch (e) {
+        logParser(`[FullSchedule] Failed to write cache file: ${e.message}`, 'WARN');
+      }
+    } else {
+      setLastFullUpdateTimestamp(finishTime);
+      logParser(`[FullSchedule] Crawl completed in ${durationSec}s: ${all.length} lessons, ${fetched.length}/${allGroups.length} groups. Changes: NO (cache unchanged)`, 'INFO');
     }
-  }
 
-  console.log(`[FullSchedule] Готово: ${all.length} пар, ${allGroups.length} групп, за ${((Date.now() - t0) / 1000).toFixed(1)} с; изменения: ${changed ? 'да' : 'нет'}`);
-  fullScheduleBuilding = false;
-  return all;
-})();
-  
+    fullScheduleBuilding = false;
+    return all;
+  })();
+
   fullSchedulePromise.catch(e => {
-    console.error('[FullSchedule] Ошибка сборки:', e.message);
+    logParser(`[FullSchedule] Crawl error: ${e.message}`, 'ERROR');
     fullScheduleError = e.message;
     fullScheduleBuilding = false;
   });
-  
+
   return fullSchedulePromise;
 }
 
-async function ensureFullSchedule() {
-  // Если кэш уже загружен — возвращаем его сразу
-  if (fullScheduleCache) return fullScheduleCache;
-  
-  // Если сборка уже идёт — не ждём, возвращаем null
-  // Клиент получит ответ, что данные ещё собираются
-  if (fullScheduleBuilding) {
-    return null;
+function checkAndTriggerFullSchedule() {
+  const now = Date.now();
+  const lastUpdate = getLastFullUpdateTimestamp();
+  if ((!fullScheduleCache || now - lastUpdate >= FULL_SCHEDULE_INTERVAL) && !fullScheduleBuilding) {
+    logParser('[FullSchedule] Triggering background full schedule crawl (interval >= 10m or initial run)...', 'INFO');
+    buildFullSchedule().catch(e => logParser(`[FullSchedule] Background build error: ${e.message}`, 'ERROR'));
   }
-  
-  // Если сборка ещё не запускалась — запускаем в фоне и возвращаем null
-  buildFullSchedule().catch(e => console.error('[FullSchedule] Фоновая сборка:', e.message));
+}
+
+async function ensureFullSchedule() {
+  if (fullScheduleCache) return fullScheduleCache;
+  if (fullScheduleBuilding) return null;
+  checkAndTriggerFullSchedule();
   return null;
 }
 
@@ -1194,6 +1240,7 @@ async function getGroupScheduleAutoDetect(faculty, form, course, group, groupTex
 // ===== Unified schedule endpoint (group / teacher / room) =====
 async function handleScheduleRequest(req, res) {
   try {
+    checkAndTriggerFullSchedule();
     const { faculty, form, course, group, groupText, tid, taid, sid, tname, audience, date } = req.query;
     if (audience && date) {
       const schedule = await getAudienceScheduleBseu(audience.trim(), date.trim());
@@ -1218,6 +1265,11 @@ app.get('/api/schedule', handleScheduleRequest);
 app.get('/api/schedule/group', handleScheduleRequest);
 app.get('/api/schedule/teacher', handleScheduleRequest);
 app.get('/api/schedule/room', handleScheduleRequest);
+
+// Endpoint /api/ping для Keep-Alive системы
+app.get('/api/ping', (req, res) => {
+  res.status(200).send('OK');
+});
 
 // ===== ENDPOINT: список аудиторий =====
 app.get('/api/audiences', async (req, res) => {
@@ -1340,6 +1392,7 @@ app.get('/api/status', (req, res) => {
       entries: fullScheduleCache ? fullScheduleCache.length : 0,
       building: fullScheduleBuilding,
       updatedAt: fullScheduleUpdatedAt,
+      lastFullUpdate: getLastFullUpdateTimestamp(),
       startedAt: fullScheduleStartedAt,
       error: fullScheduleError,
       buildingTime: fullScheduleStartedAt ? Math.floor((Date.now() - fullScheduleStartedAt) / 1000) + 's' : null
@@ -1355,26 +1408,25 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running at http://0.0.0.0:${PORT}`);
+// Cron задача: запускать проверку каждые 10 минут
+cron.schedule('*/10 * * * *', () => {
+  logParser('[Cron] Executing 10-minute scheduled background parse cycle...', 'INFO');
+  checkAndTriggerFullSchedule();
+});
+
+const server = app.listen(PORT, () => {
+  logParser(`Server is running at port ${PORT}`);
   
-  // Загружаем кэш из файла при старте
   if (fullScheduleCache) {
-    console.log(`[Cache] Загружен кэш с ${fullScheduleCache.length} записями.`);
+    logParser(`[Cache] Initial cache loaded with ${fullScheduleCache.length} entries.`);
   } else {
-    // На Render (и локально) сразу запускаем сборку полного расписания,
-    // чтобы режим "по аудитории" работал без ожидания первого запроса.
-    console.warn('[Cache] Кэш не загружен. Запускаем начальную сборку полного расписания...');
-    buildFullSchedule().catch(e => console.error('[FullSchedule] Ошибка начальной сборки:', e.message));
+    logParser('[Cache] Cache empty. Initializing background full schedule build...');
   }
   
-  // Периодическая сборка для обновления кэша
-  setInterval(() => {
-    buildFullSchedule().catch(e => console.error('[FullSchedule] Ошибка периодической сборки:', e.message));
-  }, FULL_SCHEDULE_INTERVAL);
+  checkAndTriggerFullSchedule();
 });
 
 server.on('error', (err) => {
-  console.error('Server failed to start:', err);
+  logParser(`Server failed to start: ${err.message}`, 'ERROR');
   process.exit(1);
 });

@@ -682,6 +682,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     isDefaultGroupActive = false; // переключение таба сбрасывает режим основной группы
     updateDefaultGroupModeClass();
     setDefaultGroupActiveState(false);
+    // Кнопка подгрупп — ТОЛЬКО в режиме группы по умолчанию: при любом
+    // переключении вкладки/выходе из режима сразу прячем её (не дожидаясь
+    // обхода через updateDefaultGroupShowButton).
+    updateSubgroupFilterButton();
     const tabGroup = document.getElementById("tab-group");
     const tabTeacher = document.getElementById("tab-teacher");
     const tabRoom = document.getElementById("tab-room");

@@ -625,11 +625,21 @@
        }
      }
 
+    /* Абсолютная страховка: кнопка подгрупп видна ТОЛЬКО в режиме группы по
+       умолчанию (класс default-group-mode на <body>). Даже если JS-логика
+       где-то упустит сброс, CSS не даст ей появиться на вкладках
+       преподавателя/аудитории или в ручном выборе группы. */
+    body:not(.default-group-mode) #subgroup-filter-btn { display: none !important; }
+    /* Класс .hidden (JS) должен всегда работать поверх центрирующего display,
+       чтобы кнопка гарантированно пряталась, когда подгрупп нет. */
+    #subgroup-filter-btn.hidden { display: none !important; }
+
     /* Центрирование кнопки фильтра подгрупп и её иконки (все экраны).
        Селектор #schedule-toolbar .flex НЕ применяется: он "проваливается"
-       в кнопки с классом flex и ломает justify-content у #subgroup-filter-btn. */
+       в кнопки с классом flex и ломает justify-content у #subgroup-filter-btn.
+       display оставляем из класса flex — НЕ перебиваем !important, иначе
+       сломается скрытие через .hidden. */
     #subgroup-filter-btn {
-      display: inline-flex !important;
       align-items: center !important;
       justify-content: center !important;
       padding: 0 !important;
