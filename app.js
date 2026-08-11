@@ -4307,13 +4307,49 @@ card.innerHTML = `
         renderLessonsForDate(newDateISO);
       }
     }
-  });
+   });
+
+  // Свайп для переключения месяцев в календаре доходов
+  let calendarSwipeState = null;
+  const calendarSwipeEl = document.getElementById("calendar-grid");
+  if (calendarSwipeEl) {
+    calendarSwipeEl.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) {
+        calendarSwipeState = {
+          startX: e.touches[0].clientX,
+          startY: e.touches[0].clientY,
+          startTime: Date.now()
+        };
+      }
+    }, { passive: true });
+
+    calendarSwipeEl.addEventListener("touchend", (e) => {
+      if (!calendarSwipeState) return;
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const deltaX = touch.clientX - calendarSwipeState.startX;
+      const deltaY = touch.clientY - calendarSwipeState.startY;
+      const deltaTime = Date.now() - calendarSwipeState.startTime;
+      calendarSwipeState = null;
+
+      if (Math.abs(deltaX) > Math.abs(deltaY) &&
+          Math.abs(deltaX) > 60 &&
+          deltaTime < 400) {
+        if (deltaX < 0) {
+          incomeNextPeriod.click();
+        } else {
+          incomePrevPeriod.click();
+        }
+      }
+    });
+  }
 
   // ==========================================
   // ЛОГИКА РЕЖИМА "УЧЁТ ДОХОДОВ" (INCOME MODE)
   // ==========================================
 
   window.isInIncomeMode = false;
+  let incomeCalendarViewMode = localStorage.getItem('bseu_income_view_mode') === 'compact' ? 'compact' : 'detailed'; // 'detailed' | 'compact'
 
   // Селекторы элементов Доходов
   const incomeToggle = document.getElementById("income-toggle");
@@ -4485,11 +4521,35 @@ card.innerHTML = `
       targetWeekNum = Math.max(1, weekDiff + 1);
     }
     
-    return lessons.filter(l => {
+    return collapseSubgroupLessons(lessons.filter(l => {
       if (l.day.toLowerCase() !== targetDayName) return false;
       const weeks = parseWeeks(l.weeks);
       return weeks.length === 0 || weeks.includes(targetWeekNum);
-    });
+    }));
+  }
+
+  // В режиме дохода пара, разделённая на подгруппы, отображается одной общей
+  // парой (без номера аудитории) и учитывается один раз. Объединяем записи с
+  // одинаковыми временем, типом и предметом — это одна и та же пара.
+  function collapseSubgroupLessons(lessons) {
+    const groups = new Map();
+    for (const l of lessons) {
+      const key = `${l.time}|${l.type}|${l.subject}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(l);
+    }
+    const out = [];
+    for (const grp of groups.values()) {
+      const isSubgroupPair = grp.length > 1 || grp.some(x => x.subgroup && x.subgroup.trim());
+      if (!isSubgroupPair) { out.push(grp[0]); continue; }
+      // Общая пара: берём первую запись, убираем аудиторию и подгруппу,
+      // преподавателей перечисляем через запятую (в разных подгруппах разные).
+      const base = { ...grp[0], room: '', subgroup: '' };
+      const teachers = [...new Set(grp.map(x => (x.teacher || '').trim()).filter(Boolean))];
+      if (teachers.length) base.teacher = teachers.join(', ');
+      out.push(base);
+    }
+    return out;
   }
 
   function isIntersectionDismissed(dateStr) {
@@ -4921,6 +4981,7 @@ card.innerHTML = `
 
   function renderCalendar() {
     calendarGrid.innerHTML = '';
+    const isCompact = incomeCalendarViewMode === 'compact';
     const year = incomeGlobalDate.getFullYear();
     const month = incomeGlobalDate.getMonth();
     const range = getPeriodRange(year, month, incomeStartDay);
@@ -5066,61 +5127,243 @@ card.innerHTML = `
       `;
       
       const container = dayDiv.querySelector('.flex-col.gap-0\\.5.overflow-y-auto');
-      
-      // Бейджи пар — компактные, с временем начала и конца пары
-      dayLessons.forEach(l => {
-        const badge = document.createElement('div');
+
+      dayLessons.slice().sort((a, b) => {
+        const a0 = parseTimeToMinutes((a.time || '').split('-')[0]);
+        const b0 = parseTimeToMinutes((b.time || '').split('-')[0]);
+        return a0 - b0;
+      }).forEach(l => {
         const lessonColor = getLessonColorHex(l.type);
-        badge.className = 'text-[9px] sm:text-[10px] font-semibold px-1 py-[1px] rounded truncate leading-tight border';
-        badge.style.backgroundColor = lessonColor;
-        badge.style.color = getContrastColor(lessonColor);
-        badge.style.borderColor = lessonColor;
-        badge.innerText = `${l.time} ${getShortSubjectName(l)}`;
-        
-        // В режиме преподавателя группы отображаются в поле teacher через запятую
-        const displayTeacherForBadge = l.isTeacher && l.teacher
-          ? l.teacher.split(/[\n\r,;]+|\s{2,}/).join(', ')
-          : (l.teacher || '—');
-        
-        badge.title = `${l.subject} (${shortenLessonType(l.type)})\n${l.time}\nАуд. ${l.room}\n${displayTeacherForBadge}`;
-        container.appendChild(badge);
+        if (isCompact) {
+          // Компактный режим (полноценный календарь): пары — цветная полоска
+          // соответствующего цвета типа занятий, преподавателей не показываем.
+          const strip = document.createElement('div');
+          strip.className = 'h-1.5 rounded-full shrink-0';
+          strip.style.backgroundColor = lessonColor;
+          strip.title = `${l.subject} (${shortenLessonType(l.type)})\n${l.time}${l.room ? `\nАуд. ${l.room}` : ''}`;
+          container.appendChild(strip);
+        } else {
+          // Бейджи пар — компактные, с временем начала и конца пары, без преподавателей.
+          // Однословное название, помещающееся в строку, не сокращаем
+          // (сокращаем только если не влезает) — одинаково на смартфоне и ПК.
+          const badge = document.createElement('div');
+          badge.className = 'text-[9px] sm:text-[10px] font-semibold px-1 py-[1px] rounded truncate leading-tight border';
+          badge.style.backgroundColor = lessonColor;
+          badge.style.color = getContrastColor(lessonColor);
+          badge.style.borderColor = lessonColor;
+          badge.title = `${l.subject} (${shortenLessonType(l.type)})\n${l.time}${l.room ? `\nАуд. ${l.room}` : ''}`;
+
+          const fullName = (l.subject || l.shortNameRU || l.fullNameRU || '').trim() || '—';
+          const fullWords = fullName.split(/\s+/).filter(Boolean);
+          const isSingleWord = fullWords.length === 1;
+          const shortName = getShortSubjectName(l);
+          badge.innerText = `${l.time} ${isSingleWord ? fullWords[0] : shortName}`;
+
+          if (isSingleWord) {
+            // Если однословное название не помещается — заменяем на сокращённое
+            requestAnimationFrame(() => {
+              if (badge.scrollWidth > badge.clientWidth + 1 && shortName !== fullWords[0]) {
+                badge.innerText = `${l.time} ${shortName}`;
+              }
+            });
+          }
+          container.appendChild(badge);
+        }
       });
 
       // Ленты смен — цвет работы и только время; нажатие на ленту (где часы)
       // открывает ленту выбора часов и минут для этой смены
-      dayShifts.forEach(shift => {
-        const job = incomeJobs.find(j => j.id === shift.jobId);
-        if (job) {
-          const hours = calculateHours(shift.startTime, shift.endTime);
-          const ribbon = document.createElement('div');
-          ribbon.className = 'shift-ribbon shift-time-trigger';
-          ribbon.setAttribute('role', 'button');
-          ribbon.setAttribute('tabindex', '0');
-          ribbon.style.backgroundColor = job.color;
-          ribbon.style.color = getContrastColor(job.color);
-          ribbon.innerHTML = `
-            <span class="material-symbols-outlined ribbon-icon">schedule</span>
-            <span class="ribbon-time">${shift.startTime} – ${shift.endTime}</span>
-            <span class="material-symbols-outlined ribbon-arrow">arrow_right</span>`;
-          ribbon.title = `${job.name}\n${shift.startTime}-${shift.endTime}\n${hours.toFixed(1)}ч · ${(hours * job.rate).toFixed(2)} ${job.currency}\nНажмите на время, чтобы изменить`;
-          ribbon.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openShiftTimePopover(shift, ribbon);
-          });
-          ribbon.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
+      if (!isCompact) {
+        dayShifts.forEach(shift => {
+          const job = incomeJobs.find(j => j.id === shift.jobId);
+          if (job) {
+            const hours = calculateHours(shift.startTime, shift.endTime);
+            const ribbon = document.createElement('div');
+            ribbon.className = 'shift-ribbon shift-time-trigger';
+            ribbon.setAttribute('role', 'button');
+            ribbon.setAttribute('tabindex', '0');
+            ribbon.style.backgroundColor = job.color;
+            ribbon.style.color = getContrastColor(job.color);
+            ribbon.innerHTML = `
+              <span class="material-symbols-outlined ribbon-icon">schedule</span>
+              <span class="ribbon-time">${shift.startTime} – ${shift.endTime}</span>
+              <span class="material-symbols-outlined ribbon-arrow">arrow_right</span>`;
+            ribbon.title = `${job.name}\n${shift.startTime}-${shift.endTime}\n${hours.toFixed(1)}ч · ${(hours * job.rate).toFixed(2)} ${job.currency}\nНажмите на время, чтобы изменить`;
+            ribbon.addEventListener('click', (e) => {
               e.stopPropagation();
               openShiftTimePopover(shift, ribbon);
-            }
-          });
-          container.appendChild(ribbon);
-        }
-      });
+            });
+            ribbon.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                openShiftTimePopover(shift, ribbon);
+              }
+            });
+            container.appendChild(ribbon);
+          }
+        });
+      } else {
+        // Compact mode: simple colored strips
+        dayShifts.forEach(shift => {
+          const job = incomeJobs.find(j => j.id === shift.jobId);
+          if (job) {
+            const strip = document.createElement('div');
+            strip.className = 'h-1 rounded-full mt-0.5';
+            strip.style.backgroundColor = job.color;
+            container.appendChild(strip);
+          }
+        });
+      }
 
-      dayDiv.onclick = () => openTimePopover(dateStr, dayDiv);
+      dayDiv.onclick = () => {
+        if (isCompact) {
+          openIncomeDayModal(dateStr);
+        } else {
+          openTimePopover(dateStr, dayDiv);
+        }
+      };
       calendarGrid.appendChild(dayDiv);
     }
+  }
+
+  const incomeDayModal = document.getElementById("income-day-modal");
+  const incomeDayModalTitle = document.getElementById("income-day-modal-title");
+  const incomeDayShiftsList = document.getElementById("income-day-shifts-list");
+  const incomeDayLessonsList = document.getElementById("income-day-lessons-list");
+  const incomeDayTotal = document.getElementById("income-day-total");
+  const incomeDayAddShift = document.getElementById("income-day-add-shift");
+  const incomeDayModalClose = document.getElementById("income-day-modal-close");
+  let incomeDayModalDate = null;
+
+  function openIncomeDayModal(dateStr) {
+    incomeDayModalDate = dateStr;
+    const date = new Date(dateStr + "T12:00:00");
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    incomeDayModalTitle.textContent = date.toLocaleDateString('ru-RU', options);
+    
+    const dayShifts = incomeShifts.filter(s => s.date === dateStr);
+    renderIncomeDayShiftsList(dayShifts);
+    renderIncomeDayLessons(dateStr);
+    
+    if (incomeDayModal) {
+      incomeDayModal.classList.remove('hidden', 'opacity-0');
+      incomeDayModal.classList.add('opacity-100');
+      const card = incomeDayModal.querySelector('div');
+      if (card) {
+        card.classList.remove('scale-95');
+        card.classList.add('scale-100');
+      }
+    }
+  }
+
+  function closeIncomeDayModal() {
+    if (incomeDayModal) {
+      incomeDayModal.classList.remove('opacity-100');
+      incomeDayModal.classList.add('opacity-0');
+      const card = incomeDayModal.querySelector('div');
+      if (card) {
+        card.classList.remove('scale-100');
+        card.classList.add('scale-95');
+      }
+      setTimeout(() => incomeDayModal.classList.add('hidden'), 300);
+    }
+  }
+
+  function renderIncomeDayShiftsList(dayShifts) {
+    if (dayShifts.length === 0) {
+      incomeDayShiftsList.innerHTML = '<p class="text-xs text-on-surface-variant/60 dark:text-slate-500 text-center py-4">Смен на этот день нет.</p>';
+      incomeDayTotal.textContent = '';
+      return;
+    }
+
+    let totalHours = 0;
+    let totalEarn = 0;
+    
+    incomeDayShiftsList.innerHTML = dayShifts.map(s => {
+      const job = incomeJobs.find(j => j.id === s.jobId);
+      if (!job) return '';
+      const hours = calculateHours(s.startTime, s.endTime);
+      totalHours += hours;
+      totalEarn += hours * job.rate;
+      return `
+        <div class="flex items-center justify-between p-2.5 border border-outline-variant/15 dark:border-slate-800 rounded-xl bg-surface-container-low dark:bg-slate-800/60 text-xs">
+          <div class="flex items-center gap-2 truncate flex-1 min-w-0">
+            <span class="w-2.5 h-2.5 rounded shrink-0" style="background:${job.color}"></span>
+            <span class="truncate text-on-surface dark:text-slate-200"><strong>${job.name}</strong></span>
+          </div>
+          <div class="flex items-center gap-2 ml-2 shrink-0">
+            <span class="text-[10px] text-on-surface-variant/70 dark:text-slate-400">${s.startTime}–${s.endTime}</span>
+            <span class="font-bold text-emerald-500 dark:text-emerald-400 font-headline">+${(hours * job.rate).toFixed(2)} ${job.currency}</span>
+            <button type="button" onclick="event.stopPropagation(); deleteShift('${s.id}', '${incomeDayModalDate}')" class="text-on-surface-variant/40 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-400 text-lg font-light px-1 transition-colors cursor-pointer">&times;</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    incomeDayTotal.textContent = `Итого: ${totalHours.toFixed(1)} ч · ${totalEarn.toFixed(2)} ${incomeCurrentCurrency}`;
+  }
+
+  // Показывает все пары выбранного дня в модальном окне календаря
+  function renderIncomeDayLessons(dateStr) {
+    if (!incomeDayLessonsList) return;
+    const lessons = getLessonsForDate(dateStr);
+    if (!lessons.length) {
+      incomeDayLessonsList.innerHTML = '<p class="text-xs text-on-surface-variant/60 dark:text-slate-500 text-center py-2">Пар нет.</p>';
+      return;
+    }
+    incomeDayLessonsList.innerHTML = lessons
+      .slice()
+      .sort((a, b) => {
+        const a0 = parseTimeToMinutes((a.time || '').split('-')[0]);
+        const b0 = parseTimeToMinutes((b.time || '').split('-')[0]);
+        return a0 - b0;
+      })
+      .map(l => {
+        const lessonColor = getLessonColorHex(l.type);
+        // Сокращаем название так же, как в ячейках календаря на ПК, но
+        // однословное название, помещающееся в строку, показываем целиком.
+        const fullName = (l.subject || l.shortNameRU || l.fullNameRU || '').trim() || 'Предмет';
+        const words = fullName.split(/\s+/).filter(Boolean);
+        const isSingleWord = words.length === 1;
+        const shortName = getShortSubjectName(l);
+        const displayName = isSingleWord ? words[0] : shortName;
+        const typeText = shortenLessonType(l.type) || l.type || '';
+        const subjCls = isSingleWord ? ' income-day-subj" data-short="' + escapeHtml(shortName) : '';
+        return `
+        <div class="flex items-center justify-between p-2.5 border border-outline-variant/15 dark:border-slate-800 rounded-xl bg-surface-container-low dark:bg-slate-800/60 text-xs">
+          <div class="flex items-center gap-2 flex-1 min-w-0">
+            <span class="w-2.5 h-2.5 rounded shrink-0" style="background:${lessonColor}"></span>
+            <span class="truncate text-on-surface dark:text-slate-200${subjCls}"><strong>${escapeHtml(displayName)}</strong></span>
+            ${typeText ? `<span class="shrink-0 text-on-surface-variant/60 dark:text-slate-400 text-[10px] font-normal"> · ${escapeHtml(typeText)}</span>` : ''}
+          </div>
+          <div class="flex items-center gap-2 ml-2 shrink-0">
+            <span class="text-[10px] text-on-surface-variant/70 dark:text-slate-400">${l.time}${l.room ? ' · ' + escapeHtml(l.room) : ''}</span>
+          </div>
+        </div>`;
+      }).join('');
+
+    // Однословное название, не помещающееся в строку, заменяем на сокращённое
+    requestAnimationFrame(() => {
+      incomeDayLessonsList.querySelectorAll('.income-day-subj').forEach(el => {
+        if (el.scrollWidth > el.clientWidth + 1) {
+          const strong = el.querySelector('strong');
+          if (strong) strong.textContent = el.dataset.short;
+        }
+      });
+    });
+  }
+
+  if (incomeDayModalClose) {
+    incomeDayModalClose.addEventListener("click", closeIncomeDayModal);
+  }
+  if (incomeDayAddShift) {
+    incomeDayAddShift.addEventListener("click", () => {
+      closeIncomeDayModal();
+      if (incomeDayModalDate) {
+        openShiftModal(incomeDayModalDate);
+      }
+    });
   }
 
   function renderDayShiftsList(dateStr) {
@@ -5417,6 +5660,42 @@ card.innerHTML = `
   incomeSettingsBtn.addEventListener("click", openIncomeSettings);
   closeIncomeSettingsBtn.addEventListener("click", closeIncomeSettings);
 
+  const incomeViewToggle = document.getElementById("income-view-toggle");
+  const incomeViewToggleIcon = document.getElementById("income-view-toggle-icon");
+
+  // Помечаем контейнер режима классом, чтобы CSS на смартфоне мог различить
+  // ленточный (detailed) вид и полноценный календарь (compact).
+  function applyIncomeViewModeClass() {
+    if (!incomeViewContainer) return;
+    const isCompact = incomeCalendarViewMode === 'compact';
+    incomeViewContainer.classList.toggle('income-view-compact', isCompact);
+    incomeViewContainer.classList.toggle('income-view-detailed', !isCompact);
+  }
+
+  if (incomeViewToggle) {
+    // ВАЖНО: единственный обработчик. Раньше здесь же был делегированный
+    // обработчик на контейнере, который срабатывал повторно на всплытии и
+    // переключал режим дважды за один клик (кнопка казалась «нерабочей»).
+    incomeViewToggle.addEventListener("click", () => {
+      incomeCalendarViewMode = incomeCalendarViewMode === 'detailed' ? 'compact' : 'detailed';
+      localStorage.setItem('bseu_income_view_mode', incomeCalendarViewMode);
+      const isNowCompact = incomeCalendarViewMode === 'compact';
+      if (incomeViewToggleIcon) {
+        incomeViewToggleIcon.textContent = isNowCompact ? 'calendar_month' : 'view_agenda';
+      }
+      incomeViewToggle.classList.toggle('bg-primary/20', isNowCompact);
+      incomeViewToggle.classList.toggle('dark:bg-[#b5bcff]/20', isNowCompact);
+      applyIncomeViewModeClass();
+      try {
+        renderCalendar();
+      } catch (err) {
+        console.error('renderCalendar failed', err);
+      }
+    });
+  }
+
+  applyIncomeViewModeClass();
+
   currencySelect.addEventListener("change", () => {
     incomeCurrentCurrency = currencySelect.value;
     saveIncomeData();
@@ -5674,12 +5953,16 @@ function hideInstallBanner() {
 function showInstallButton() {}
 function hideInstallButton() {}
 
+const PWA_FIRST_VISIT_KEY = "bseu_pwa_first_visit_done";
+
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstallPrompt = e;
-  let dismissed = false;
-  try { dismissed = localStorage.getItem(PWA_DISMISSED_KEY) === '1'; } catch (err) { /* ignore */ }
-  if (!dismissed && groupSelected) showInstallBanner();
+  try {
+    if (localStorage.getItem(PWA_FIRST_VISIT_KEY) === '1') return;
+    localStorage.setItem(PWA_FIRST_VISIT_KEY, '1');
+  } catch (err) { /* ignore */ }
+  if (groupSelected) showInstallBanner();
 });
 
 window.addEventListener('appinstalled', () => {
@@ -5687,6 +5970,7 @@ window.addEventListener('appinstalled', () => {
   hideInstallBanner();
   hideInstallButton();
   try { localStorage.removeItem(PWA_DISMISSED_KEY); } catch (err) { /* ignore */ }
+  try { localStorage.removeItem(PWA_FIRST_VISIT_KEY); } catch (err) { /* ignore */ }
 });
 
 if (installBannerConfirm) {

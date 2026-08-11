@@ -910,10 +910,11 @@
       box-shadow: 0 0 12px 3px rgba(239, 68, 68, 0.55) !important;
       animation: month-arrow-blink 1.2s ease-in-out infinite;
     }
-    /* Календарь доходов: полноценный вертикальный список на телефоне (≤640px) */
+    /* Календарь доходов: на телефоне (≤640px) ленточный (detailed) режим
+       показываем полноценным вертикальным списком. */
     @media (max-width: 640px) {
-      #calendar-weekdays { display: none !important; }
-      #calendar-grid {
+      #income-view-container.income-view-detailed #calendar-weekdays { display: none !important; }
+      #income-view-container.income-view-detailed #calendar-grid {
         display: flex !important;
         flex-direction: column !important;
         gap: 8px !important;
@@ -921,8 +922,8 @@
         flex-grow: 0 !important;
         align-items: stretch !important;
       }
-      #calendar-grid > div.bg-transparent { display: none !important; }
-      #calendar-grid > div:not(.bg-transparent) {
+      #income-view-container.income-view-detailed #calendar-grid > div.bg-transparent { display: none !important; }
+      #income-view-container.income-view-detailed #calendar-grid > div:not(.bg-transparent) {
         width: 100% !important;
         height: auto !important;
         min-height: 0 !important;
@@ -931,15 +932,15 @@
         display: flex !important;
         flex-direction: column !important;
       }
-      .calendar-daynum { font-size: 20px !important; line-height: 1 !important; }
-      .calendar-weekday { font-size: 13px !important; }
-      #calendar-grid .no-scrollbar {
+      #income-view-container.income-view-detailed .calendar-daynum { font-size: 20px !important; line-height: 1 !important; }
+      #income-view-container.income-view-detailed .calendar-weekday { font-size: 13px !important; }
+      #income-view-container.income-view-detailed #calendar-grid .no-scrollbar {
         max-height: none !important;
         overflow: visible !important;
         gap: 4px !important;
         margin-top: 8px !important;
       }
-      #calendar-grid .no-scrollbar > div {
+      #income-view-container.income-view-detailed #calendar-grid .no-scrollbar > div {
         font-size: 12px !important;
         padding: 3px 6px !important;
         line-height: 1.2 !important;
@@ -948,8 +949,36 @@
         overflow: visible !important;
         text-overflow: clip !important;
       }
-      #calendar-grid .text-\[9px\] {
+      #income-view-container.income-view-detailed #calendar-grid .text-\[9px\] {
         font-size: 13px !important;
+      }
+
+      /* Полноценный календарь на смартфоне (compact): компактная сетка 7
+         колонок, в ячейке дня — число и цветные полоски пар/смен. */
+      #income-view-container.income-view-compact #calendar-grid {
+        display: grid !important;
+        grid-template-columns: repeat(7, 1fr) !important;
+        grid-auto-rows: 86px !important;
+        gap: 3px !important;
+        min-height: 0 !important;
+        flex-grow: 0 !important;
+      }
+      #income-view-container.income-view-compact #calendar-weekdays {
+        display: grid !important;
+        grid-template-columns: repeat(7, 1fr) !important;
+        gap: 3px !important;
+        margin-bottom: 3px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid > div.bg-transparent { display: block !important; }
+      #income-view-container.income-view-compact #calendar-grid > div:not(.bg-transparent) {
+        padding: 3px !important;
+        border-radius: 8px !important;
+      }
+      #income-view-container.income-view-compact .calendar-daynum { font-size: 11px !important; line-height: 1 !important; }
+      #income-view-container.income-view-compact .calendar-weekday { display: none !important; }
+      #income-view-container.income-view-compact #calendar-grid .no-scrollbar {
+        gap: 2px !important;
+        margin-top: 2px !important;
       }
     }
 
@@ -1781,14 +1810,19 @@
 
     <!-- Панель учёта доходов -->
     <div id="income-view-container" class="hidden w-full space-y-3 sm:space-y-4 pt-2 sm:pt-4 mb-8 sm:mb-12">
-      <div class="flex justify-between items-center shrink-0">
+       <div class="flex justify-between items-center shrink-0">
         <div class="flex items-center gap-2 sm:gap-3">
           <span class="material-symbols-outlined text-2xl sm:text-3xl text-primary dark:text-[#b5bcff]">monetization_on</span>
           <h2 class="font-headline text-xl sm:text-2xl md:text-3xl font-bold text-on-surface dark:text-white">Учёт рабочего времени</h2>
         </div>
-        <button id="income-settings-btn" aria-label="Settings" class="p-1.5 sm:p-2 rounded-full bg-primary/10 dark:bg-[#b5bcff]/10 hover:bg-primary/20 dark:hover:bg-[#b5bcff]/20 shadow-sm hover:shadow transition-all duration-200 text-primary dark:text-[#b5bcff] focus:outline-none focus:ring-2 focus:ring-primary h-10 w-10 sm:h-11 sm:w-11 flex items-center justify-center border border-primary/20 dark:border-[#b5bcff]/25 active:scale-95 cursor-pointer">
-          <span class="material-symbols-outlined text-xl sm:text-2xl" style="font-variation-settings: 'FILL' 1;">settings</span>
-        </button>
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <button id="income-view-toggle" aria-label="Переключить вид" type="button" class="h-10 w-10 sm:h-11 sm:w-11 lg:hidden flex items-center justify-center rounded-full bg-primary/10 dark:bg-[#b5bcff]/10 hover:bg-primary/20 dark:hover:bg-[#b5bcff]/20 shadow-sm hover:shadow transition-all duration-200 text-primary dark:text-[#b5bcff] active:scale-95 cursor-pointer border border-primary/20 dark:border-[#b5bcff]/25">
+            <span class="material-symbols-outlined text-xl sm:text-2xl" id="income-view-toggle-icon">view_agenda</span>
+          </button>
+          <button id="income-settings-btn" aria-label="Settings" class="p-1.5 sm:p-2 rounded-full bg-primary/10 dark:bg-[#b5bcff]/10 hover:bg-primary/20 dark:hover:bg-[#b5bcff]/20 shadow-sm hover:shadow transition-all duration-200 text-primary dark:text-[#b5bcff] focus:outline-none focus:ring-2 focus:ring-primary h-10 w-10 sm:h-11 sm:w-11 flex items-center justify-center border border-primary/20 dark:border-[#b5bcff]/25 active:scale-95 cursor-pointer">
+            <span class="material-symbols-outlined text-xl sm:text-2xl" style="font-variation-settings: 'FILL' 1;">settings</span>
+          </button>
+        </div>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-6 items-stretch">
@@ -1950,6 +1984,32 @@
       </form>
 
       <div id="jobs-list" class="mt-3 sm:mt-4 space-y-1.5 sm:space-y-2 max-h-[120px] sm:max-h-[150px] overflow-y-auto no-scrollbar pr-0.5"></div>
+    </div>
+  </div>
+
+  <!-- Модальное окно дня в календаре доходов -->
+  <div id="income-day-modal" class="fixed inset-0 bg-slate-900/60 z-[100] hidden items-center justify-center p-3 sm:p-4 backdrop-blur-md transition-all duration-300 opacity-0">
+    <div class="bg-surface-container-lowest dark:bg-slate-900 border border-outline-variant/15 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-sm p-5 sm:p-6 max-h-[90vh] overflow-y-auto no-scrollbar transform scale-95 transition-all duration-300">
+      <div class="flex justify-between items-center border-b border-outline-variant/10 dark:border-slate-800 pb-2 sm:pb-3 mb-3 sm:mb-4">
+        <h2 class="text-base sm:text-lg font-bold text-on-surface dark:text-white flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary dark:text-[#b5bcff]">calendar_today</span>
+          <span id="income-day-modal-title">Дата</span>
+        </h2>
+        <button id="income-day-modal-close" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-7 h-7 flex items-center justify-center text-xl sm:text-2xl leading-none cursor-pointer transition-all">&times;</button>
+      </div>
+      <div>
+        <h3 class="text-[10px] font-bold text-on-surface-variant/60 dark:text-slate-500 uppercase tracking-wider mb-2">Пары</h3>
+        <div id="income-day-lessons-list" class="space-y-2 mb-4"></div>
+      </div>
+      <div>
+        <h3 class="text-[10px] font-bold text-on-surface-variant/60 dark:text-slate-500 uppercase tracking-wider mb-2">Смены</h3>
+        <div id="income-day-shifts-list" class="space-y-2 mb-4"></div>
+      </div>
+      <div id="income-day-total" class="text-sm font-bold text-emerald-600 dark:text-emerald-400 mb-4 text-right"></div>
+      <button type="button" id="income-day-add-shift" class="w-full signature-gradient text-on-primary font-bold text-xs sm:text-sm py-2.5 rounded-xl shadow-md hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-base">add</span>
+        <span>Добавить смену</span>
+      </button>
     </div>
   </div>
 
