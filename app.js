@@ -641,8 +641,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const modalGroup = document.getElementById("modal-group");
   const modalSaveBtn = document.getElementById("modal-save-btn");
 
-  // Инициализация темной темы
-  initTheme();
+  // Инициализация темы выполняется в инлайн-скрипте в <head> (index.html)
+  // — там же хранится логика переключения и сохранения в localStorage,
+  // чтобы тема работала независимо от кэша этого файла.
   
    // Заполнение факультетов
    populateFacultySelect(facultySelect);
@@ -780,35 +781,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     refreshAttendanceToggles();
   }
 
-  // Логика тёмной темы
-  function initTheme() {
-    const savedTheme = localStorage.getItem("theme");
-    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    
-    if (savedTheme === "dark" || (!savedTheme && systemPrefersDark)) {
-      document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("light");
-      themeToggleIcon.textContent = "light_mode";
-    } else {
-      document.documentElement.classList.remove("dark");
-      document.documentElement.classList.add("light");
-      themeToggleIcon.textContent = "dark_mode";
-    }
-  }
-
-  themeToggleBtn.addEventListener("click", () => {
-    if (document.documentElement.classList.contains("dark")) {
-      document.documentElement.classList.remove("dark");
-      document.documentElement.classList.add("light");
-      themeToggleIcon.textContent = "dark_mode";
-      localStorage.setItem("theme", "light");
-    } else {
-      document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("light");
-      themeToggleIcon.textContent = "light_mode";
-      localStorage.setItem("theme", "dark");
-    }
-  });
+  // Логика тёмной темы (применение и переключение) перенесена в инлайн-скрипт
+  // в <head> (index.html), чтобы она сохранялась независимо от кэша app.js.
 
   // Долгое нажатие (5 сек) на заголовок «БГЭУ Расписание» открывает
   // модалку сброса состояния первого запуска. Удобно на смартфоне,
@@ -4364,7 +4338,6 @@ card.innerHTML = `
   const incomeIntroAddJobBtn = document.getElementById("income-intro-add-job");
   
   const currencySelect = document.getElementById("currency-select");
-  const periodStartDay = document.getElementById("period-start-day");
   const salaryCurrency = document.getElementById("salary-currency");
   const salaryAmount = document.getElementById("salary-amount");
   const jobForm = document.getElementById("job-form");
@@ -4410,10 +4383,10 @@ card.innerHTML = `
   incomeJobs = (() => { try { return JSON.parse(localStorage.getItem('jobs')); } catch(e) { return null; } })() || [];
   incomeShifts = (() => { try { return JSON.parse(localStorage.getItem('shifts')); } catch(e) { return null; } })() || [];
   let incomeCurrentCurrency = localStorage.getItem('currency') || 'BYN';
-  let incomeStartDay = parseInt(localStorage.getItem('startDay')) || 1;
   let incomeIsMultiCurrency = localStorage.getItem('isMultiCurrency') === 'true';
   let incomeMonthlySalariesPeriod = (() => { try { return JSON.parse(localStorage.getItem('monthlySalariesPeriod')); } catch(e) { return null; } })() || {};
   let incomeDismissedIntersections = (() => { try { return JSON.parse(localStorage.getItem('dismissedIntersections')); } catch(e) { return null; } })() || [];
+  try { localStorage.removeItem('startDay'); } catch (e) { /* ignore */ }
 
   let incomeGlobalDate = new Date(); 
   let incomeChartInstance = null;
@@ -4422,7 +4395,6 @@ card.innerHTML = `
 
   // Инициализация значений элементов
   if (currencySelect) currencySelect.value = incomeCurrentCurrency;
-  if (periodStartDay) periodStartDay.value = incomeStartDay;
   if (multicurrencyToggle) multicurrencyToggle.checked = incomeIsMultiCurrency;
 
   // Обработчик закрытия модалок по клику вне контента
@@ -4718,20 +4690,16 @@ card.innerHTML = `
     return (amount * incomeRates[fromCurrency]) / incomeRates[toCurrency];
   }
 
-  function getPeriodRange(year, monthIndex, startDayNum) {
+  function getPeriodRange(year, monthIndex) {
     const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-    // Старт — startDayNum текущего месяца (если число больше дней месяца — берём последний день)
-    const startDay = Math.min(Math.max(Math.trunc(startDayNum) || 1, 1), daysInMonth);
-    const start = new Date(year, monthIndex, startDay, 0, 0, 0);
-    // Конец — день (startDayNum - 1) следующего месяца.
-    // Если startDayNum === 1, то (startDayNum - 1) === 0 → последний день текущего месяца.
-    const end = new Date(year, monthIndex + 1, startDayNum - 1, 23, 59, 59);
+    const start = new Date(year, monthIndex, 1, 0, 0, 0);
+    const end = new Date(year, monthIndex + 1, 0, 23, 59, 59);
     return { start, end };
   }
 
   function isDateInCurrentPeriod(dateStr) {
     const checkDate = new Date(dateStr + "T12:00:00");
-    const range = getPeriodRange(incomeGlobalDate.getFullYear(), incomeGlobalDate.getMonth(), incomeStartDay);
+    const range = getPeriodRange(incomeGlobalDate.getFullYear(), incomeGlobalDate.getMonth());
     return checkDate >= range.start && checkDate <= range.end;
   }
 
@@ -4746,7 +4714,6 @@ card.innerHTML = `
     localStorage.setItem('jobs', JSON.stringify(incomeJobs));
     localStorage.setItem('shifts', JSON.stringify(incomeShifts));
     localStorage.setItem('currency', incomeCurrentCurrency);
-    localStorage.setItem('startDay', incomeStartDay);
     localStorage.setItem('isMultiCurrency', incomeIsMultiCurrency);
     localStorage.setItem('monthlySalariesPeriod', JSON.stringify(incomeMonthlySalariesPeriod));
     localStorage.setItem('dismissedIntersections', JSON.stringify(incomeDismissedIntersections));
@@ -4984,7 +4951,7 @@ card.innerHTML = `
     const isCompact = incomeCalendarViewMode === 'compact';
     const year = incomeGlobalDate.getFullYear();
     const month = incomeGlobalDate.getMonth();
-    const range = getPeriodRange(year, month, incomeStartDay);
+    const range = getPeriodRange(year, month);
     const pad = (num) => String(num).padStart(2, '0');
     
     calendarMonthYear.innerText = 
@@ -5402,7 +5369,7 @@ card.innerHTML = `
   function updateIncomeAndChart() {
     const year = incomeGlobalDate.getFullYear();
     const month = incomeGlobalDate.getMonth();
-    const range = getPeriodRange(year, month, incomeStartDay);
+    const range = getPeriodRange(year, month);
     const pad = (num) => String(num).padStart(2, '0');
     const activeKey = getPeriodKey(incomeGlobalDate);
     
@@ -5484,7 +5451,7 @@ card.innerHTML = `
       <div class="flex items-center justify-between p-2 border border-outline-variant/15 dark:border-slate-800 rounded-xl bg-surface-container-low dark:bg-slate-850/60 text-xs">
         <div class="flex items-center gap-2 truncate">
           <span class="w-2.5 h-2.5 rounded shrink-0" style="background: ${j.color}"></span>
-          <span class="text-on-surface-variant dark:text-slate-350 truncate"><strong>${j.name}</strong> — ${j.rate.toFixed(2)} ${j.currency}</span>
+          <span class="text-on-surface-variant dark:text-slate-200 truncate"><strong>${j.name}</strong> — ${j.rate.toFixed(2)} ${j.currency}</span>
         </div>
         <div class="flex items-center gap-1 shrink-0">
           <button type="button" onclick="editJob('${j.id}')" title="Редактировать работу" class="text-on-surface-variant/40 hover:text-primary dark:text-slate-500 dark:hover:text-[#b5bcff] text-base leading-none px-1 transition-colors cursor-pointer"><span class="material-symbols-outlined text-base">edit</span></button>
@@ -5503,7 +5470,7 @@ card.innerHTML = `
     for (let i = 5; i >= 0; i--) {
       let d = new Date(incomeGlobalDate.getFullYear(), incomeGlobalDate.getMonth() - i, 1);
       labels.push(incomeMonths[d.getMonth()]);
-      periodsRanges.push(getPeriodRange(d.getFullYear(), d.getMonth(), incomeStartDay));
+      periodsRanges.push(getPeriodRange(d.getFullYear(), d.getMonth()));
       keys.push(getPeriodKey(d));
     }
 
@@ -5698,14 +5665,6 @@ card.innerHTML = `
 
   currencySelect.addEventListener("change", () => {
     incomeCurrentCurrency = currencySelect.value;
-    saveIncomeData();
-  });
-
-  periodStartDay.addEventListener("change", () => {
-    let val = parseInt(periodStartDay.value);
-    if (isNaN(val) || val < 1) val = 1; 
-    if (val > 31) val = 31; 
-    incomeStartDay = val;
     saveIncomeData();
   });
 
@@ -6147,7 +6106,6 @@ if (installBtn) {
           jobs: JSON.parse(localStorage.getItem('jobs') || '[]'),
           shifts: JSON.parse(localStorage.getItem('shifts') || '[]'),
           currency: localStorage.getItem('currency') || 'BYN',
-          startDay: parseInt(localStorage.getItem('startDay')) || 1,
           isMultiCurrency: localStorage.getItem('isMultiCurrency') === 'true',
           monthlySalariesPeriod: JSON.parse(localStorage.getItem('monthlySalariesPeriod') || '{}'),
           dismissedIntersections: JSON.parse(localStorage.getItem('dismissedIntersections') || '[]')
@@ -6173,7 +6131,6 @@ if (installBtn) {
         localStorage.setItem('jobs', JSON.stringify(payload.jobs || []));
         localStorage.setItem('shifts', JSON.stringify(payload.shifts || []));
         localStorage.setItem('currency', payload.currency || 'BYN');
-        localStorage.setItem('startDay', payload.startDay || 1);
         localStorage.setItem('isMultiCurrency', !!payload.isMultiCurrency);
         localStorage.setItem('monthlySalariesPeriod', JSON.stringify(payload.monthlySalariesPeriod || {}));
         localStorage.setItem('dismissedIntersections', JSON.stringify(payload.dismissedIntersections || []));
@@ -6368,20 +6325,7 @@ if (installBtn) {
   });
 
   if (menuCreate) menuCreate.addEventListener('click', () => { hideMenu(); openAccountModal(false); });
-  if (menuTheme) menuTheme.addEventListener('click', () => {
-    hideMenu();
-    if (document.documentElement.classList.contains("dark")) {
-      document.documentElement.classList.remove("dark");
-      document.documentElement.classList.add("light");
-      themeToggleIcon.textContent = "dark_mode";
-      localStorage.setItem("theme", "light");
-    } else {
-      document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("light");
-      themeToggleIcon.textContent = "light_mode";
-      localStorage.setItem("theme", "dark");
-    }
-  });
+  // Переключение темы из меню обрабатывает инлайн-скрипт в <head> (index.html).
   if (menuEditGroup) menuEditGroup.addEventListener('click', () => {
     hideMenu();
     // Вызываем глобальную функцию, определённую в замыкании DOMContentLoaded.

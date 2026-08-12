@@ -11,6 +11,54 @@
   <meta name="apple-mobile-web-app-title" content="БГЭУ"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png"/>
+  <script>
+    // ===== Тёмная тема: чтение и запись в localStorage =====
+    // Логика намеренно размещена в инлайн-скрипте в <head>, а не в app.js,
+    // чтобы тема гарантированно применялась и запоминалась независимо от
+    // устаревшего кэша service worker (app.js может быть старой версией).
+    (function () {
+      var THEME_KEY = "theme";
+
+      function applyTheme(dark) {
+        var el = document.documentElement;
+        if (dark) {
+          el.classList.add("dark");
+          el.classList.remove("light");
+        } else {
+          el.classList.remove("dark");
+          el.classList.add("light");
+        }
+        var icon = document.getElementById("theme-toggle-icon");
+        if (icon) icon.textContent = dark ? "light_mode" : "dark_mode";
+      }
+
+      function isDark() {
+        return document.documentElement.classList.contains("dark");
+      }
+
+      // Применяем сохранённую тему ДО первой отрисовки (без «мигания» светлой).
+      var saved;
+      try { saved = localStorage.getItem(THEME_KEY); } catch (e) { saved = null; }
+      applyTheme(saved === "dark");
+
+      // Обрабатываем клики по переключателю темы (делегирование), чтобы
+      // сохранение работало даже при устаревшем кэше app.js.
+      document.addEventListener("click", function (e) {
+        var t = e.target && e.target.closest
+          ? (e.target.closest("#theme-toggle") || e.target.closest("#account-menu-theme"))
+          : null;
+        if (!t) return;
+        var next = !isDark();
+        try { localStorage.setItem(THEME_KEY, next ? "dark" : "light"); } catch (err) {}
+        applyTheme(next);
+        // Пункт из меню аккаунта — закрываем меню (как делал app.js).
+        if (t.id === "account-menu-theme") {
+          var menu = document.getElementById("account-menu");
+          if (menu) menu.classList.add("hidden");
+        }
+      });
+    })();
+  </script>
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -982,6 +1030,15 @@
       }
     }
 
+    @media (max-width: 640px) and (orientation: landscape) {
+      #income-view-container.income-view-compact #calendar-grid {
+        gap: 2px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid > div:not(.bg-transparent) {
+        padding: 4px !important;
+      }
+    }
+
     /* === Кастомные индикаторы в полях настроек доходов и смен === */
     /* Прячем нативные спиннеры (стрелки) и индикатор времени браузера */
     .income-number-input,
@@ -1501,7 +1558,7 @@
       <span class="material-symbols-outlined text-primary dark:text-[#b5bcff] text-4xl sm:text-5xl">install_mobile</span>
       <div>
         <h3 class="text-base sm:text-lg font-extrabold text-on-surface dark:text-white mb-1">Установить приложение</h3>
-        <p class="text-xs sm:text-sm text-on-surface-variant dark:text-slate-400 leading-relaxed">Добавьте на рабочий стол — работайте быстрее и без браузера.</p>
+        <p class="text-xs sm:text-sm text-on-surface-variant dark:text-slate-400 leading-relaxed">Добавьте на рабочий стол — работайте быстрее и без браузера.<br>Если не хотите устанавливать сейчас, это можно сделать позже через меню аккаунта (кнопка в правом верхнем углу).</p>
       </div>
       <div class="flex items-center gap-2 w-full">
         <button id="pwa-install-confirm" class="flex-1 signature-gradient text-on-primary text-sm font-bold py-2.5 rounded-xl shadow-md hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer">
@@ -1916,23 +1973,12 @@
             <option value="BYN">BYN</option><option value="RUB">RUB</option><option value="USD">USD</option><option value="EUR">EUR</option>
           </select>
         </div>
-        <div>
-          <label for="period-start-day" class="block text-[10px] font-bold text-on-surface-variant/80 dark:text-slate-400 uppercase tracking-wider mb-1 sm:mb-2">День старта</label>
-          <div class="relative flex items-center">
-            <span class="material-symbols-outlined field-icon absolute left-2.5 sm:left-3 text-base pointer-events-none">calendar_view_day</span>
-            <input type="number" id="period-start-day" value="1" min="1" max="31" data-stepper class="income-number-input w-full text-sm sm:text-base md:text-xs bg-surface-container-low dark:bg-slate-800 border-none rounded-xl py-2 sm:py-2.5 pl-8 sm:pl-9 pr-9 sm:pr-10 font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary">
-            <div class="num-stepper">
-              <button type="button" data-step="up" aria-label="Увеличить день старта"><span class="material-symbols-outlined">arrow_drop_up</span></button>
-              <button type="button" data-step="down" aria-label="Уменьшить день старта"><span class="material-symbols-outlined">arrow_drop_down</span></button>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div class="mb-4 sm:mb-6 bg-primary/5 dark:bg-[#b5bcff]/5 p-3 sm:p-4 rounded-2xl border border-primary/10 dark:border-[#b5bcff]/10">
         <label class="block text-[10px] font-bold text-primary dark:text-[#b5bcff] uppercase tracking-wider mb-1 sm:mb-2">Фиксированный оклад</label>
-          <div class="grid grid-cols-3 gap-1 sm:gap-2">
-            <select id="salary-currency" class="w-full text-sm sm:text-base md:text-xs bg-surface-container-lowest dark:bg-slate-800 border border-outline-variant/10 dark:border-slate-750 rounded-xl py-2 sm:py-2.5 px-1 sm:px-2 font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary">
+          <div class="grid grid-cols-3 gap-1 sm:gap-2 items-center">
+            <select id="salary-currency" class="w-full text-sm sm:text-base md:text-xs bg-surface-container-lowest dark:bg-slate-800 border border-outline-variant/10 dark:border-slate-750 rounded-xl py-2 sm:py-2.5 px-1 sm:px-2 font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary text-center">
               <option value="BYN">BYN</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="RUB">RUB</option>
             </select>
             <div class="col-span-2 relative flex items-center">
@@ -2413,7 +2459,7 @@
         <h3 class="text-lg font-extrabold text-on-surface dark:text-white">Установить приложение</h3>
       </div>
       <p class="text-sm text-on-surface-variant dark:text-slate-400 mb-5 leading-relaxed">
-        Добавьте на рабочий стол — работайте быстрее и без браузера. Данные останутся на устройстве и не потеряются.
+        Добавьте на рабочий стол — работайте быстрее и без браузера. Данные останутся на устройстве и не потеряются.<br>Если не хотите устанавливать сейчас, это можно сделать позже через меню аккаунта (кнопка в правом верхнем углу).
       </p>
       <div class="flex gap-3">
         <button id="account-offer-skip" class="flex-1 px-4 py-2.5 rounded-xl font-semibold text-on-surface-variant dark:text-slate-300 bg-surface-container-low dark:bg-slate-800 hover:bg-surface-container-high dark:hover:bg-slate-700 transition-all cursor-pointer">
@@ -2472,6 +2518,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
