@@ -4345,6 +4345,28 @@ card.innerHTML = `
   const jobCurrency = document.getElementById("job-currency");
   const jobRate = document.getElementById("job-rate");
   const jobColor = document.getElementById("job-color");
+  
+  function normalizeHex(hex) {
+    if (!hex || typeof hex !== 'string') return null;
+    let normalized = hex.trim();
+    if (!normalized.startsWith('#')) normalized = '#' + normalized;
+    if (!/^#[0-9A-Fa-f]{6}$/.test(normalized)) return null;
+    return normalized.toUpperCase();
+  }
+  
+  function updateColorUI(hex) {
+    const normalized = normalizeHex(hex);
+    if (!normalized) return;
+    if (jobColor) jobColor.value = normalized;
+  }
+  
+  document.querySelectorAll('.color-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const color = btn.dataset.color;
+      if (color) updateColorUI(color);
+    });
+  });
+  
   const jobsList = document.getElementById("jobs-list");
   const jobFormTitle = document.getElementById("job-form-title");
   const jobAddBtn = document.getElementById("job-add-btn");
@@ -5360,6 +5382,11 @@ card.innerHTML = `
   if (incomeDayModalClose) {
     incomeDayModalClose.addEventListener("click", closeIncomeDayModal);
   }
+  if (incomeDayModal) {
+    incomeDayModal.addEventListener("click", (e) => {
+      if (e.target === incomeDayModal) closeIncomeDayModal();
+    });
+  }
   if (incomeDayAddShift) {
     incomeDayAddShift.addEventListener("click", () => {
       closeIncomeDayModal();
@@ -5613,7 +5640,7 @@ card.innerHTML = `
   function resetJobForm() {
     editingJobId = null;
     jobForm.reset();
-    jobColor.value = '#98A2F3';
+    updateColorUI('#98A2F3');
     jobFormTitle.textContent = 'Добавить новую работу';
     jobAddBtn.classList.remove('hidden');
     jobFormActions.classList.add('hidden');
@@ -5627,7 +5654,7 @@ card.innerHTML = `
     jobName.value = job.name;
     jobRate.value = job.rate;
     jobCurrency.value = job.currency;
-    jobColor.value = job.color;
+    updateColorUI(job.color);
     jobFormTitle.textContent = 'Редактировать работу';
     jobAddBtn.classList.add('hidden');
     jobFormActions.classList.remove('hidden');
@@ -5743,7 +5770,7 @@ card.innerHTML = `
     } else {
       incomeJobs.push({ id: Date.now().toString(), name, rate, currency, color });
       this.reset();
-      jobColor.value = '#98A2F3';
+      updateColorUI('#98A2F3');
     }
     saveIncomeData();
   });
