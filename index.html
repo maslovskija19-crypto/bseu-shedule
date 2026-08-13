@@ -16,30 +16,37 @@
     // Логика намеренно размещена в инлайн-скрипте в <head>, а не в app.js,
     // чтобы тема гарантированно применялась и запоминалась независимо от
     // устаревшего кэша service worker (app.js может быть старой версией).
-    (function () {
-      var THEME_KEY = "theme";
+     (function () {
+       var THEME_KEY = "theme";
 
-      function applyTheme(dark) {
-        var el = document.documentElement;
-        if (dark) {
-          el.classList.add("dark");
-          el.classList.remove("light");
-        } else {
-          el.classList.remove("dark");
-          el.classList.add("light");
-        }
-        var icon = document.getElementById("theme-toggle-icon");
-        if (icon) icon.textContent = dark ? "light_mode" : "dark_mode";
-      }
+       function applyTheme(dark) {
+         var el = document.documentElement;
+         if (dark) {
+           el.classList.add("dark");
+           el.classList.remove("light");
+         } else {
+           el.classList.remove("dark");
+           el.classList.add("light");
+         }
+         var icon = document.getElementById("theme-toggle-icon");
+         if (icon) icon.textContent = dark ? "light_mode" : "dark_mode";
+       }
+       // Доступно из app.js и других скриптов.
+       window.applyTheme = applyTheme;
 
-      function isDark() {
+       function isDark() {
         return document.documentElement.classList.contains("dark");
       }
 
-      // Применяем сохранённую тему ДО первой отрисовки (без «мигания» светлой).
-      var saved;
-      try { saved = localStorage.getItem(THEME_KEY); } catch (e) { saved = null; }
-      applyTheme(saved === "dark");
+       // Применяем сохранённую тему ДО первой отрисовки (без «мигания» светлой).
+       // Если пользователь ещё не выбирал тему, используем предпочтения ОС.
+       var saved;
+       try { saved = localStorage.getItem(THEME_KEY); } catch (e) { saved = null; }
+       var dark;
+       if (saved === "dark") dark = true;
+       else if (saved === "light") dark = false;
+       else dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+       applyTheme(dark);
 
       // Обрабатываем клики по переключателю темы (делегирование), чтобы
       // сохранение работало даже при устаревшем кэше app.js.
@@ -51,12 +58,31 @@
         var next = !isDark();
         try { localStorage.setItem(THEME_KEY, next ? "dark" : "light"); } catch (err) {}
         applyTheme(next);
-        // Пункт из меню аккаунта — закрываем меню (как делал app.js).
+        // Пункт из меню аккаунта (устаревший id) — закрываем меню.
         if (t.id === "account-menu-theme") {
           var menu = document.getElementById("account-menu");
           if (menu) menu.classList.add("hidden");
         }
       });
+    })();
+  </script>
+  <script>
+    // Раннее применение настройки «Скрыть учёт рабочего времени» — до того,
+    // как кнопка режима дохода успеет «мелькнуть» на экране.
+    (function () {
+      function applyHideIncome() {
+        var hidden = false;
+        try { hidden = localStorage.getItem("bseu_hide_income") === "1"; } catch (e) {}
+        var t = document.getElementById("income-toggle");
+        var b = document.getElementById("bottom-income-btn");
+        if (t) t.classList.toggle("hide-income-btn", hidden);
+        if (b) b.classList.toggle("hide-income-btn", hidden);
+      }
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", applyHideIncome);
+      } else {
+        applyHideIncome();
+      }
     })();
   </script>
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
@@ -186,10 +212,35 @@
        padding-bottom: 80px;
      }
      /* Календарь доходов: фиксированная высота строки, чтобы в ячейке
-        помещалось до 6 строк (пар или смен) без наложения */
-     #calendar-grid {
-       grid-auto-rows: 152px;
-     }
+        помещалось ровно 5 строк (пар или смен) без наложения.
+        Высота контейнера списка в ячейке ограничена так, чтобы на любом
+        устройстве были видны ровно 5 полных пар, а 6-я не показывалась.
+        Мобильный список-«лента» не затрагивается: там высота снимается
+        отдельным правилом (max-height: none). */
+      #calendar-grid {
+        grid-auto-rows: 144px;
+      }
+      #calendar-grid .no-scrollbar {
+        max-height: 94px;
+      }
+      #income-view-container.income-view-compact #calendar-grid .no-scrollbar {
+        max-height: 70px !important;
+      }
+
+      /* Mobile calendar optimizations */
+      @media (max-width: 640px) {
+        #calendar-grid {
+          grid-auto-rows: 110px !important;
+          gap: 3px !important;
+        }
+        #calendar-grid > div {
+          padding: 4px !important;
+        }
+        #calendar-weekdays {
+          gap: 3px !important;
+          margin-bottom: 3px !important;
+        }
+      }
 
     
     .autocomplete-suggestion {
@@ -641,6 +692,8 @@
         min-height: unset !important;
         height: auto !important;
         flex-grow: 0 !important;
+        padding-left: 6px !important;
+        padding-right: 6px !important;
       }
     }
     @media (min-width: 641px) and (max-width: 900px) {
@@ -654,24 +707,26 @@
     }
 
      /* Full-screen modals on mobile */
-     @media (max-width: 480px) {
-       #income-settings-modal > div,
-       #shift-modal > div,
-       #first-time-modal > div,
-       #income-intro-modal > div {
-         max-width: 100% !important;
-         margin: 0 8px !important;
-         max-height: 85vh !important;
-         padding: 20px !important;
-       }
-       #income-settings-modal,
-       #shift-modal,
-       #first-time-modal,
-       #income-intro-modal {
-         padding: 8px !important;
-         align-items: center !important;
-       }
-     }
+      @media (max-width: 480px) {
+        #income-settings-modal > div,
+        #shift-modal > div,
+        #first-time-modal > div,
+        #income-intro-modal > div,
+        #settings-modal > div {
+          max-width: 100% !important;
+          margin: 0 8px !important;
+          max-height: 85vh !important;
+          padding: 20px !important;
+        }
+        #income-settings-modal,
+        #shift-modal,
+        #first-time-modal,
+        #income-intro-modal,
+        #settings-modal {
+          padding: 8px !important;
+          align-items: center !important;
+        }
+      }
 
     /* Абсолютная страховка: кнопка подгрупп видна ТОЛЬКО в режиме группы по
        умолчанию (класс default-group-mode на <body>). Даже если JS-логика
@@ -834,6 +889,13 @@
     #theme-toggle {
       display: none !important;
     }
+    /* Скрытие кнопки учёта рабочего времени по настройке (см. Настройки аккаунта).
+       Остальные кнопки (шапка — flex с gap, нижняя навигация — flex:1) при этом
+       автоматически смещаются, занимая освободившееся место без пробелов. */
+    #income-toggle.hide-income-btn,
+    #bottom-income-btn.hide-income-btn {
+      display: none !important;
+    }
     
     @media (max-width: 639px) {
       #account-btn {
@@ -882,6 +944,88 @@
       }
       #schedule-header-row .text-xs {
         font-size: 10px !important;
+      }
+    }
+
+    /* Calendar ultra-compact on very small phones */
+    @media (max-width: 480px) {
+      #income-view-container section[aria-label="Calendar view"] > div {
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+      }
+      #calendar-month-year {
+        font-size: 0.75rem !important;
+      }
+      #calendar-prev-month,
+      #calendar-next-month {
+        padding: 6px !important;
+      }
+      #calendar-prev-month .material-symbols-outlined,
+      #calendar-next-month .material-symbols-outlined {
+        font-size: 1.1rem !important;
+      }
+      #calendar-weekdays {
+        font-size: 9px !important;
+      }
+      #income-view-container.income-view-detailed #calendar-grid > div:not(.bg-transparent) {
+        padding: 8px !important;
+        border-radius: 10px !important;
+      }
+      #income-view-container.income-view-detailed .calendar-daynum {
+        font-size: 16px !important;
+      }
+      #income-view-container.income-view-detailed .calendar-weekday {
+        font-size: 11px !important;
+      }
+      #income-view-container.income-view-detailed #calendar-grid .no-scrollbar {
+        gap: 2px !important;
+        margin-top: 4px !important;
+      }
+      #income-view-container.income-view-detailed #calendar-grid .no-scrollbar > div {
+        font-size: 11px !important;
+        padding: 2px 4px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid {
+        grid-auto-rows: 64px !important;
+        gap: 2px !important;
+      }
+      #income-view-container.income-view-compact #calendar-weekdays {
+        gap: 2px !important;
+        margin-bottom: 2px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid > div:not(.bg-transparent) {
+        padding: 2px !important;
+        border-radius: 6px !important;
+      }
+      #income-view-container.income-view-compact .calendar-daynum {
+        font-size: 10px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .no-scrollbar {
+        max-height: 32px !important;
+        gap: 1px !important;
+        margin-top: 1px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .no-scrollbar > div {
+        font-size: 9px !important;
+        line-height: 1.1 !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .shift-ribbon {
+        font-size: 7px !important;
+        padding: 1px 2px !important;
+        gap: 1px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .shift-ribbon .ribbon-icon {
+        font-size: 8px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .shift-ribbon .ribbon-arrow {
+        font-size: 6px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .text-\[9px\] {
+        font-size: 7px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .overflow-indicator,
+      #income-view-container.income-view-compact #calendar-grid .text-\[8px\] {
+        font-size: 6px !important;
       }
     }
 
@@ -959,13 +1103,13 @@
       animation: month-arrow-blink 1.2s ease-in-out infinite;
     }
     /* Календарь доходов: на телефоне (≤640px) ленточный (detailed) режим
-       показываем полноценным вертикальным списком. */
+       показываем компактным вертикальным списком. */
     @media (max-width: 640px) {
       #income-view-container.income-view-detailed #calendar-weekdays { display: none !important; }
       #income-view-container.income-view-detailed #calendar-grid {
         display: flex !important;
         flex-direction: column !important;
-        gap: 8px !important;
+        gap: 6px !important;
         min-height: 0 !important;
         flex-grow: 0 !important;
         align-items: stretch !important;
@@ -975,22 +1119,22 @@
         width: 100% !important;
         height: auto !important;
         min-height: 0 !important;
-        padding: 12px !important;
-        border-radius: 14px !important;
+        padding: 10px !important;
+        border-radius: 12px !important;
         display: flex !important;
         flex-direction: column !important;
       }
-      #income-view-container.income-view-detailed .calendar-daynum { font-size: 20px !important; line-height: 1 !important; }
-      #income-view-container.income-view-detailed .calendar-weekday { font-size: 13px !important; }
+      #income-view-container.income-view-detailed .calendar-daynum { font-size: 18px !important; line-height: 1 !important; }
+      #income-view-container.income-view-detailed .calendar-weekday { font-size: 12px !important; }
       #income-view-container.income-view-detailed #calendar-grid .no-scrollbar {
         max-height: none !important;
         overflow: visible !important;
-        gap: 4px !important;
-        margin-top: 8px !important;
+        gap: 3px !important;
+        margin-top: 6px !important;
       }
       #income-view-container.income-view-detailed #calendar-grid .no-scrollbar > div {
         font-size: 12px !important;
-        padding: 3px 6px !important;
+        padding: 2px 5px !important;
         line-height: 1.2 !important;
         margin-bottom: 0 !important;
         white-space: normal !important;
@@ -998,15 +1142,15 @@
         text-overflow: clip !important;
       }
       #income-view-container.income-view-detailed #calendar-grid .text-\[9px\] {
-        font-size: 13px !important;
+        font-size: 12px !important;
       }
 
-      /* Полноценный календарь на смартфоне (compact): компактная сетка 7
+      /* Полноценный календарь на смартфоне (compact): удобная сетка 7
          колонок, в ячейке дня — число и цветные полоски пар/смен. */
       #income-view-container.income-view-compact #calendar-grid {
         display: grid !important;
         grid-template-columns: repeat(7, 1fr) !important;
-        grid-auto-rows: 86px !important;
+        grid-auto-rows: 72px !important;
         gap: 3px !important;
         min-height: 0 !important;
         flex-grow: 0 !important;
@@ -1019,24 +1163,48 @@
       }
       #income-view-container.income-view-compact #calendar-grid > div.bg-transparent { display: block !important; }
       #income-view-container.income-view-compact #calendar-grid > div:not(.bg-transparent) {
-        padding: 3px !important;
+        padding: 4px !important;
         border-radius: 8px !important;
       }
-      #income-view-container.income-view-compact .calendar-daynum { font-size: 11px !important; line-height: 1 !important; }
+      #income-view-container.income-view-compact .calendar-daynum { font-size: 12px !important; line-height: 1 !important; }
       #income-view-container.income-view-compact .calendar-weekday { display: none !important; }
       #income-view-container.income-view-compact #calendar-grid .no-scrollbar {
+        max-height: 38px !important;
         gap: 2px !important;
         margin-top: 2px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .no-scrollbar > div {
+        font-size: 10px !important;
+        line-height: 1.1 !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .shift-ribbon {
+        font-size: 8px !important;
+        padding: 1px 3px !important;
+        gap: 1px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .shift-ribbon .ribbon-icon {
+        font-size: 9px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .shift-ribbon .ribbon-arrow {
+        font-size: 7px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .text-\[9px\] {
+        font-size: 8px !important;
+      }
+      #income-view-container.income-view-compact #calendar-grid .overflow-indicator,
+      #income-view-container.income-view-compact #calendar-grid .text-\[8px\] {
+        font-size: 7px !important;
       }
     }
 
     @media (max-width: 640px) and (orientation: landscape) {
       #income-view-container.income-view-compact #calendar-grid {
-        gap: 2px !important;
+        gap: 3px !important;
       }
       #income-view-container.income-view-compact #calendar-grid > div:not(.bg-transparent) {
         padding: 4px !important;
       }
+      #income-view-container.income-view-compact .calendar-daynum { font-size: 11px !important; }
     }
 
     /* === Кастомные индикаторы в полях настроек доходов и смен === */
@@ -1112,7 +1280,7 @@
       border-radius: 9999px;
       font-size: 10px;
       font-weight: 800;
-      line-height: 1.1;
+      line-height: 1.25;
       white-space: nowrap;
       overflow: hidden;
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28), 0 1px 2px rgba(15, 23, 42, 0.10);
@@ -1503,7 +1671,7 @@
           <button id="top-mode-room" class="segment-btn-inactive px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-on-surface-variant dark:text-slate-300 transition">По аудитории</button>
         </div>
         <!-- Кнопка режима Доход (монетка) -->
-        <button id="income-toggle" class="p-1.5 sm:p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all text-primary dark:text-[#b5bcff] flex items-center justify-center relative cursor-pointer" title="Учёт доходов">
+        <button id="income-toggle" class="p-1.5 sm:p-2 hover:bg-primary/10 dark:hover:bg-[#b5bcff]/10 rounded-lg transition-all text-primary dark:text-[#b5bcff] flex items-center justify-center relative cursor-pointer" title="Учёт доходов">
           <span class="material-symbols-outlined text-xl sm:text-2xl">monetization_on</span>
         </button>
         <!-- Кнопка аккаунта -->
@@ -1516,10 +1684,10 @@
             <div id="account-menu-status" class="px-3 py-2 text-xs sm:text-sm font-semibold text-on-surface-variant/70 dark:text-slate-400 border-b border-outline-variant/10 dark:border-slate-700 mb-1 truncate">
               Не авторизован
             </div>
-            <button id="account-menu-theme" class="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold text-on-surface dark:text-slate-200 hover:bg-primary/10 dark:hover:bg-[#b5bcff]/10 transition-all cursor-pointer text-left">
-              <span class="material-symbols-outlined text-base">dark_mode</span>
-              <span>Сменить тему</span>
-            </button>
+             <button id="account-menu-settings" class="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold text-on-surface dark:text-slate-200 hover:bg-primary/10 dark:hover:bg-[#b5bcff]/10 transition-all cursor-pointer text-left">
+               <span class="material-symbols-outlined text-base">settings</span>
+               <span>Настройки</span>
+             </button>
             <button id="account-menu-edit-group" class="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold text-on-surface dark:text-slate-200 hover:bg-primary/10 dark:hover:bg-[#b5bcff]/10 transition-all cursor-pointer text-left">
               <span class="material-symbols-outlined text-base">edit</span>
               <span>Изменить группу</span>
@@ -1885,17 +2053,17 @@
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-6 items-stretch">
         <!-- Календарь -->
         <section aria-label="Calendar view" class="lg:col-span-8 flex flex-col h-full min-h-[350px] sm:min-h-[500px]">
-          <div class="bg-surface-container-lowest dark:bg-slate-900 rounded-2xl shadow-xl p-3 sm:p-6 flex-grow flex flex-col border border-outline-variant/10 dark:border-slate-800/80 h-full min-h-[300px] sm:min-h-[400px]">
-            <div class="flex justify-between items-center mb-3 sm:mb-4 shrink-0">
+          <div class="bg-surface-container-lowest dark:bg-slate-900 rounded-2xl shadow-xl p-2 sm:p-6 flex-grow flex flex-col border border-outline-variant/10 dark:border-slate-800/80 h-full min-h-[280px] sm:min-h-[400px]">
+            <div class="flex justify-between items-center mb-2 sm:mb-4 shrink-0">
               <button id="calendar-prev-month" class="bg-primary/10 hover:bg-primary/20 text-primary dark:text-[#b5bcff] p-1.5 sm:p-2 rounded-xl transition-colors active:scale-95 cursor-pointer flex items-center justify-center">
                 <span class="material-symbols-outlined text-lg sm:text-xl">chevron_left</span>
               </button>
-              <h2 id="calendar-month-year" class="text-sm sm:text-base md:text-lg font-bold text-on-surface dark:text-white tracking-tight text-center">Период...</h2>
+              <h2 id="calendar-month-year" class="text-xs sm:text-base md:text-lg font-bold text-on-surface dark:text-white tracking-tight text-center">Период...</h2>
               <button id="calendar-next-month" class="bg-primary/10 hover:bg-primary/20 text-primary dark:text-[#b5bcff] p-1.5 sm:p-2 rounded-xl transition-colors active:scale-95 cursor-pointer flex items-center justify-center">
                 <span class="material-symbols-outlined text-lg sm:text-xl">chevron_right</span>
               </button>
             </div>
-            <div id="calendar-weekdays" class="grid grid-cols-7 gap-1 sm:gap-2 mb-1 sm:mb-2 text-center text-[10px] sm:text-xs font-bold text-on-surface-variant/60 dark:text-slate-400 shrink-0">
+            <div id="calendar-weekdays" class="grid grid-cols-7 gap-1 sm:gap-2 mb-0.5 sm:mb-2 text-center text-[9px] sm:text-xs font-bold text-on-surface-variant/60 dark:text-slate-400 shrink-0">
               <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div>
             </div>
             <div id="calendar-grid" class="grid grid-cols-7 gap-1 sm:gap-2 min-h-[250px] sm:min-h-[300px]"></div>
@@ -1930,7 +2098,7 @@
                 <span class="text-[10px] sm:text-xs text-on-surface-variant/80 dark:text-slate-400 font-medium">Разделять по валютам</span>
                 <label class="relative inline-flex items-center cursor-pointer select-none">
                   <input type="checkbox" id="multicurrency-toggle" class="sr-only peer"/>
-                  <div class="w-8 sm:w-9 h-[18px] sm:h-5 bg-surface-container-high dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 sm:after:h-4 after:w-3.5 sm:after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                  <div class="w-8 sm:w-9 h-[18px] sm:h-5 bg-surface-container-high dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white dark:after:bg-slate-200 after:border-gray-300 dark:after:border-slate-500 after:border after:rounded-full after:h-3.5 sm:after:h-4 after:w-3.5 sm:after:w-4 after:transition-all peer-checked:bg-primary"></div>
                 </label>
               </div>
               
@@ -1978,7 +2146,7 @@
       <div class="mb-4 sm:mb-6 bg-primary/5 dark:bg-[#b5bcff]/5 p-3 sm:p-4 rounded-2xl border border-primary/10 dark:border-[#b5bcff]/10">
         <label class="block text-[10px] font-bold text-primary dark:text-[#b5bcff] uppercase tracking-wider mb-1 sm:mb-2">Фиксированный оклад</label>
           <div class="grid grid-cols-3 gap-1 sm:gap-2 items-center">
-            <select id="salary-currency" class="w-full text-sm sm:text-base md:text-xs bg-surface-container-lowest dark:bg-slate-800 border border-outline-variant/10 dark:border-slate-750 rounded-xl py-2 sm:py-2.5 px-1 sm:px-2 font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary text-center">
+            <select id="salary-currency" class="w-full text-sm sm:text-base md:text-xs bg-surface-container-lowest dark:bg-slate-800 border border-outline-variant/10 dark:border-slate-700 rounded-xl py-2 sm:py-2.5 px-1 sm:px-2 font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary text-center">
               <option value="BYN">BYN</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="RUB">RUB</option>
             </select>
             <div class="col-span-2 relative flex items-center">
@@ -2451,6 +2619,39 @@
     </div>
   </div>
 
+  <!-- Модальное окно настроек -->
+   <div id="settings-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-3 sm:p-4 hidden transition-opacity duration-300 opacity-0">
+     <div class="bg-surface-container-lowest dark:bg-slate-900 border border-outline-variant/15 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-sm p-5 sm:p-6 md:p-8 max-h-[90vh] overflow-y-auto no-scrollbar transform scale-95 transition-all duration-300">
+       <div class="flex justify-between items-center border-b border-outline-variant/10 dark:border-slate-800 pb-2 sm:pb-3 mb-3 sm:mb-4">
+         <h3 class="text-base sm:text-lg font-bold text-on-surface dark:text-white flex items-center gap-2">
+           <span class="material-symbols-outlined text-primary dark:text-[#b5bcff]" style="font-variation-settings: 'FILL' 1;">settings</span>
+           <span>Настройки</span>
+         </h3>
+        <button id="settings-modal-close" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-7 h-7 flex items-center justify-center text-xl sm:text-2xl leading-none cursor-pointer transition-all" aria-label="Закрыть">&times;</button>
+       </div>
+       <div class="space-y-4">
+         <div class="flex items-center justify-between gap-3 py-1">
+           <span class="text-sm font-semibold text-on-surface dark:text-slate-200">Скрыть «Учёт рабочего времени»</span>
+           <label class="relative inline-flex items-center cursor-pointer select-none shrink-0">
+             <input type="checkbox" id="settings-hide-income-toggle" class="sr-only peer"/>
+                           <div class="w-9 h-5 bg-surface-container-high dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white dark:after:bg-slate-200 after:border-gray-300 dark:after:border-slate-500 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+           </label>
+         </div>
+         <div class="flex items-center justify-between gap-3 py-1">
+           <span class="text-sm font-semibold text-on-surface dark:text-slate-200">Тёмная тема</span>
+           <label class="relative inline-flex items-center cursor-pointer select-none shrink-0">
+             <input type="checkbox" id="settings-theme-toggle" class="sr-only peer"/>
+                           <div class="w-9 h-5 bg-surface-container-high dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white dark:after:bg-slate-200 after:border-gray-300 dark:after:border-slate-500 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+           </label>
+         </div>
+         <div class="border-t border-outline-variant/10 dark:border-slate-700 pt-3 flex flex-col gap-2.5">
+           <a href="privacy.html" class="text-sm font-semibold text-primary dark:text-[#b5bcff] hover:underline transition-colors">Политика конфиденциальности</a>
+           <a href="terms.html" class="text-sm font-semibold text-primary dark:text-[#b5bcff] hover:underline transition-colors">Пользовательское соглашение</a>
+         </div>
+       </div>
+    </div>
+  </div>
+
   <!-- Модалка предложения установить приложение (после первого выбора группы) -->
   <div id="account-offer-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-3 sm:p-4 hidden transition-opacity duration-300 opacity-0">
     <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 w-full max-w-sm shadow-2xl transition-transform duration-300 scale-95">
@@ -2518,6 +2719,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>

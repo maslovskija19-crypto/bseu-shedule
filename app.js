@@ -5095,56 +5095,89 @@ card.innerHTML = `
       
       const container = dayDiv.querySelector('.flex-col.gap-0\\.5.overflow-y-auto');
 
-      dayLessons.slice().sort((a, b) => {
-        const a0 = parseTimeToMinutes((a.time || '').split('-')[0]);
-        const b0 = parseTimeToMinutes((b.time || '').split('-')[0]);
-        return a0 - b0;
-      }).forEach(l => {
-        const lessonColor = getLessonColorHex(l.type);
-        if (isCompact) {
-          // Компактный режим (полноценный календарь): пары — цветная полоска
-          // соответствующего цвета типа занятий, преподавателей не показываем.
-          const strip = document.createElement('div');
-          strip.className = 'h-1.5 rounded-full shrink-0';
-          strip.style.backgroundColor = lessonColor;
-          strip.title = `${l.subject} (${shortenLessonType(l.type)})\n${l.time}${l.room ? `\nАуд. ${l.room}` : ''}`;
-          container.appendChild(strip);
-        } else {
-          // Бейджи пар — компактные, с временем начала и конца пары, без преподавателей.
-          // Однословное название, помещающееся в строку, не сокращаем
-          // (сокращаем только если не влезает) — одинаково на смартфоне и ПК.
-          const badge = document.createElement('div');
-          badge.className = 'text-[9px] sm:text-[10px] font-semibold px-1 py-[1px] rounded truncate leading-tight border';
-          badge.style.backgroundColor = lessonColor;
-          badge.style.color = getContrastColor(lessonColor);
-          badge.style.borderColor = lessonColor;
-          badge.title = `${l.subject} (${shortenLessonType(l.type)})\n${l.time}${l.room ? `\nАуд. ${l.room}` : ''}`;
+      // Собираем все элементы (пары и смены) для отображения
+      const allItems = [];
 
-          const fullName = (l.subject || l.shortNameRU || l.fullNameRU || '').trim() || '—';
-          const fullWords = fullName.split(/\s+/).filter(Boolean);
-          const isSingleWord = fullWords.length === 1;
-          const shortName = getShortSubjectName(l);
-          badge.innerText = `${l.time} ${isSingleWord ? fullWords[0] : shortName}`;
+      // Добавляем пары в общий список
+      dayLessons.forEach(l => {
+        const startMin = parseTimeToMinutes((l.time || '').split('-')[0]);
+        allItems.push({
+          type: 'lesson',
+          data: l,
+          sortKey: startMin
+        });
+      });
 
-          if (isSingleWord) {
-            // Если однословное название не помещается — заменяем на сокращённое
-            requestAnimationFrame(() => {
-              if (badge.scrollWidth > badge.clientWidth + 1 && shortName !== fullWords[0]) {
-                badge.innerText = `${l.time} ${shortName}`;
-              }
-            });
-          }
-          container.appendChild(badge);
+      // Добавляем смены в общий список
+      dayShifts.forEach(shift => {
+        const job = incomeJobs.find(j => j.id === shift.jobId);
+        if (job) {
+          const startMin = parseTimeToMinutes(shift.startTime);
+          allItems.push({
+            type: 'shift',
+            data: shift,
+            job: job,
+            sortKey: startMin
+          });
         }
       });
 
-      // Ленты смен — цвет работы и только время; нажатие на ленту (где часы)
-      // открывает ленту выбора часов и минут для этой смены
-      if (!isCompact) {
-        dayShifts.forEach(shift => {
-          const job = incomeJobs.find(j => j.id === shift.jobId);
-          if (job) {
-            const hours = calculateHours(shift.startTime, shift.endTime);
+      // Сортируем все элементы по времени
+      allItems.sort((a, b) => a.sortKey - b.sortKey);
+      
+      // В ленте (детальный режим на смартфоне) показываем ВСЕ пары и смены
+      // без ограничения и без индикатора «+N». В сетке календаря (десктоп /
+      // планшет) ограничиваем число видимых элементов, а остаток показываем
+      // счётчиком «+N». В компактном режиме на телефоне уменьшаем лимит,
+      // чтобы элементы ровно помещались в ячейку без наложения.
+      const isFeed = !isCompact && window.innerWidth <= 640;
+      let visibleItems = allItems;
+      let hiddenCount = 0;
+      if (!isFeed) {
+        const maxVisible = (isCompact && window.innerWidth <= 640) ? 3 : 4;
+        visibleItems = allItems.slice(0, maxVisible);
+        hiddenCount = allItems.length - maxVisible;
+      }
+      // Отображаем видимые элементы (в ленте — все)
+      visibleItems.forEach(item => {
+        if (item.type === 'lesson') {
+          const l = item.data;
+          const lessonColor = getLessonColorHex(l.type);
+          if (isCompact) {
+            const strip = document.createElement('div');
+            strip.className = 'h-1.5 rounded-full shrink-0';
+            strip.style.backgroundColor = lessonColor;
+            strip.title = `${l.subject} (${shortenLessonType(l.type)})\n${l.time}${l.room ? `\nАуд. ${l.room}` : ''}`;
+            container.appendChild(strip);
+          } else {
+            const badge = document.createElement('div');
+            badge.className = 'text-[9px] sm:text-[10px] font-semibold px-1 py-[1px] rounded truncate leading-tight border';
+            badge.style.backgroundColor = lessonColor;
+            badge.style.color = getContrastColor(lessonColor);
+            badge.style.borderColor = lessonColor;
+            badge.title = `${l.subject} (${shortenLessonType(l.type)})\n${l.time}${l.room ? `\nАуд. ${l.room}` : ''}`;
+
+            const fullName = (l.subject || l.shortNameRU || l.fullNameRU || '').trim() || '—';
+            const fullWords = fullName.split(/\s+/).filter(Boolean);
+            const isSingleWord = fullWords.length === 1;
+            const shortName = getShortSubjectName(l);
+            badge.innerText = `${l.time} ${isSingleWord ? fullWords[0] : shortName}`;
+
+            if (isSingleWord) {
+              requestAnimationFrame(() => {
+                if (badge.scrollWidth > badge.clientWidth + 1 && shortName !== fullWords[0]) {
+                  badge.innerText = `${l.time} ${shortName}`;
+                }
+              });
+            }
+            container.appendChild(badge);
+          }
+        } else if (item.type === 'shift') {
+          const shift = item.data;
+          const job = item.job;
+          const hours = calculateHours(shift.startTime, shift.endTime);
+          
+          if (!isCompact) {
             const ribbon = document.createElement('div');
             ribbon.className = 'shift-ribbon shift-time-trigger';
             ribbon.setAttribute('role', 'button');
@@ -5168,19 +5201,22 @@ card.innerHTML = `
               }
             });
             container.appendChild(ribbon);
-          }
-        });
-      } else {
-        // Compact mode: simple colored strips
-        dayShifts.forEach(shift => {
-          const job = incomeJobs.find(j => j.id === shift.jobId);
-          if (job) {
+          } else {
             const strip = document.createElement('div');
-            strip.className = 'h-1 rounded-full mt-0.5';
+            strip.className = 'h-1.5 rounded-full mt-0.5';
             strip.style.backgroundColor = job.color;
             container.appendChild(strip);
           }
-        });
+        }
+      });
+
+      // Если есть скрытые элементы — показываем индикатор
+      if (hiddenCount > 0) {
+        const overflowIndicator = document.createElement('div');
+        overflowIndicator.className = 'text-[8px] sm:text-[9px] text-center text-on-surface-variant/60 dark:text-slate-500 truncate font-medium';
+        overflowIndicator.textContent = `+${hiddenCount}`;
+        overflowIndicator.title = `Ещё ${hiddenCount} ${pluralLessons(hiddenCount)}`;
+        container.appendChild(overflowIndicator);
       }
 
       dayDiv.onclick = () => {
@@ -5448,7 +5484,7 @@ card.innerHTML = `
 
   function renderJobsList() {
     jobsList.innerHTML = incomeJobs.map(j => `
-      <div class="flex items-center justify-between p-2 border border-outline-variant/15 dark:border-slate-800 rounded-xl bg-surface-container-low dark:bg-slate-850/60 text-xs">
+      <div class="flex items-center justify-between p-2 border border-outline-variant/15 dark:border-slate-800 rounded-xl bg-surface-container-low dark:bg-slate-800/60 text-xs">
         <div class="flex items-center gap-2 truncate">
           <span class="w-2.5 h-2.5 rounded shrink-0" style="background: ${j.color}"></span>
           <span class="text-on-surface-variant dark:text-slate-200 truncate"><strong>${j.name}</strong> — ${j.rate.toFixed(2)} ${j.currency}</span>
@@ -5626,6 +5662,9 @@ card.innerHTML = `
 
   incomeSettingsBtn.addEventListener("click", openIncomeSettings);
   closeIncomeSettingsBtn.addEventListener("click", closeIncomeSettings);
+  incomeSettingsModal.addEventListener("click", (e) => {
+    if (e.target === incomeSettingsModal) closeIncomeSettings();
+  });
 
   const incomeViewToggle = document.getElementById("income-view-toggle");
   const incomeViewToggleIcon = document.getElementById("income-view-toggle-icon");
@@ -6002,7 +6041,6 @@ if (installBtn) {
   const menuCreate = document.getElementById('account-menu-create');
   const menuLogout = document.getElementById('account-menu-logout');
   const menuDelete = document.getElementById('account-menu-delete');
-  const menuTheme = document.getElementById('account-menu-theme');
   const menuEditGroup = document.getElementById('account-menu-edit-group');
 
   const accountModal = document.getElementById('account-modal');
@@ -6326,6 +6364,63 @@ if (installBtn) {
 
   if (menuCreate) menuCreate.addEventListener('click', () => { hideMenu(); openAccountModal(false); });
   // Переключение темы из меню обрабатывает инлайн-скрипт в <head> (index.html).
+
+  // --- Кнопка «Настройки» в меню аккаунта ---
+  const menuSettings = document.getElementById('account-menu-settings');
+  const settingsModal = document.getElementById('settings-modal');
+  const settingsCloseBtn = document.getElementById('settings-modal-close');
+  const settingsHideIncomeToggle = document.getElementById('settings-hide-income-toggle');
+  const settingsThemeToggle = document.getElementById('settings-theme-toggle');
+  const HIDE_INCOME_KEY = 'bseu_hide_income';
+
+  function isIncomeHidden() {
+    try { return localStorage.getItem(HIDE_INCOME_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  // Применяет настройку видимости кнопки режима дохода (шапка + нижняя навигация).
+  // Остальные кнопки при этом автоматически смещаются (flex), без пробелов.
+  function applyIncomeVisibility() {
+    const hidden = isIncomeHidden();
+    const incomeToggle = document.getElementById('income-toggle');
+    const bottomIncomeBtn = document.getElementById('bottom-income-btn');
+    if (incomeToggle) incomeToggle.classList.toggle('hide-income-btn', hidden);
+    if (bottomIncomeBtn) bottomIncomeBtn.classList.toggle('hide-income-btn', hidden);
+    // Если режим дохода активен, а кнопку скрыли — выходим из режима,
+    // иначе пользователь не сможет вернуться в расписание.
+    if (hidden && window.isInIncomeMode && incomeToggle) incomeToggle.click();
+  }
+
+  if (menuSettings) menuSettings.addEventListener('click', () => {
+    hideMenu();
+    syncThemeToggle();
+    if (settingsModal) openModal(settingsModal);
+  });
+  if (settingsCloseBtn) settingsCloseBtn.addEventListener('click', () => closeModal(settingsModal));
+  if (settingsModal) settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) closeModal(settingsModal);
+  });
+   if (settingsHideIncomeToggle) {
+     settingsHideIncomeToggle.checked = isIncomeHidden();
+     settingsHideIncomeToggle.addEventListener('change', () => {
+       try { localStorage.setItem(HIDE_INCOME_KEY, settingsHideIncomeToggle.checked ? '1' : '0'); } catch (e) {}
+       applyIncomeVisibility();
+     });
+   }
+  // Тумлер тёмной темы в окне Настроек синхронизирован с кнопкой #theme-toggle:
+  // меняет классы .dark/.light на <html> и запоминает выбор в localStorage.
+  function syncThemeToggle() {
+    if (!settingsThemeToggle) return;
+    const dark = document.documentElement.classList.contains('dark');
+    settingsThemeToggle.checked = dark;
+  }
+  if (settingsThemeToggle) {
+    settingsThemeToggle.addEventListener('change', () => {
+      try { localStorage.setItem('theme', settingsThemeToggle.checked ? 'dark' : 'light'); } catch (e) {}
+     if (typeof window.applyTheme === 'function') window.applyTheme(settingsThemeToggle.checked);
+    });
+  }
+  applyIncomeVisibility();
+
   if (menuEditGroup) menuEditGroup.addEventListener('click', () => {
     hideMenu();
     // Вызываем глобальную функцию, определённую в замыкании DOMContentLoaded.

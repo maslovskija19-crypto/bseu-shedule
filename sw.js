@@ -1,4 +1,4 @@
-const CACHE = 'bseu-schedule-v19';
+const CACHE = 'bseu-schedule-v23';
 const PRECACHE = [
   './',
   './index.html',
@@ -6,7 +6,9 @@ const PRECACHE = [
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './privacy.html',
+  './terms.html'
 ];
 
 self.addEventListener('install', e => {
