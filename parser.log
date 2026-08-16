@@ -587,3 +587,17 @@
 [2026-08-16 08:10:49] [WARN] [FullSchedule] Faculty 530 group list error: HTTP status 500
 [2026-08-16 08:10:58] [WARN] [FullSchedule] Faculty 497 group list error: HTTP status 500
 [2026-08-16 08:11:07] [WARN] [FullSchedule] Faculty 535 group list error: HTTP status 500
+[2026-08-16 08:19:24] [INFO] [FullSchedule] Crawl completed in 564.6s: 21409 lessons, 626/626 groups. Changes: NO (cache unchanged)
+[2026-08-16 08:20:00] [INFO] [Cron] Executing 10-minute scheduled background parse cycle...
+[2026-08-16 08:40:00] [INFO] [Cron] Executing 10-minute scheduled background parse cycle...
+[2026-08-16 08:40:00] [INFO] [FullSchedule] Triggering background full schedule crawl (interval >= 10m or initial run)...
+[2026-08-16 08:40:00] [INFO] [FullSchedule] Starting complete university schedule background crawl...
+[2026-08-16 08:40:41] [WARN] [FullSchedule] Faculty 450 group list error: HTTP status 500
+[2026-08-16 08:40:50] [WARN] [FullSchedule] Faculty 530 group list error: HTTP status 500
+[2026-08-16 08:40:59] [WARN] [FullSchedule] Faculty 497 group list error: HTTP status 500
+[2026-08-16 08:41:07] [WARN] [FullSchedule] Faculty 535 group list error: HTTP status 500
+[2026-08-16 08:48:37] [INFO] [FullSchedule] Crawl completed in 517.0s: 21409 lessons, 626/626 groups. Changes: NO (cache unchanged)
+[2026-08-16 08:50:00] [INFO] [Cron] Executing 10-minute scheduled background parse cycle...
+[2026-08-16 08:52:32] [INFO] [Cache] Loaded cache from file: D:\VS\fullScheduleCache.json (21409 items)
+[2026-08-16 08:52:32] [INFO] Server is running at http://0.0.0.0:3000
+[2026-08-16 08:52:32] [INFO] [Cache] Initial cache loaded with 21409 entries.

@@ -8,12 +8,17 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const cron = require('node-cron');
 
-const PARSER_LOG_FILE = path.join(__dirname, 'parser.log');
+const BASE_DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
+const PARSER_LOG_FILE = path.join(BASE_DATA_DIR, 'parser.log');
+
 function logParser(msg, level = 'INFO') {
   const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const formatted = `[${timestamp}] [${level}] ${msg}`;
   console.log(formatted);
   try {
+    if (!fs.existsSync(path.dirname(PARSER_LOG_FILE))) {
+      fs.mkdirSync(path.dirname(PARSER_LOG_FILE), { recursive: true });
+    }
     fs.appendFileSync(PARSER_LOG_FILE, formatted + '\n', 'utf-8');
   } catch (e) {
     console.error('[Logger] Failed to write to parser.log:', e.message);
@@ -28,6 +33,10 @@ const auth = require('./server/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
+
+// Поддержка обратного прокси (Nginx, cPanel Passenger, Cloudflare, hoster.by)
+app.set('trust proxy', 1);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -162,7 +171,7 @@ app.post('/api/sync', (req, res) => {
 });
 
 // ===== File-based cache layer (для расписания BSEU) =====
-const CACHE_DIR = path.join(__dirname, '.cache');
+const CACHE_DIR = path.join(BASE_DATA_DIR, '.cache');
 const CACHE_VERSION = 'v5'; // Увеличить при изменении логики парсинга
 function ensureCacheDir() {
   try {
@@ -625,8 +634,8 @@ let audienceScheduleCache = {};
 let audienceScheduleUpdatedAt = 0;
 
 // --- Загрузка кэша и метки времени из файлов ---
-const CACHE_FILE = path.join(__dirname, 'fullScheduleCache.json');
-const LAST_FULL_UPDATE_FILE = path.join(__dirname, 'last_full_update.txt');
+const CACHE_FILE = path.join(BASE_DATA_DIR, 'fullScheduleCache.json');
+const LAST_FULL_UPDATE_FILE = path.join(BASE_DATA_DIR, 'last_full_update.txt');
 
 function getLastFullUpdateTimestamp() {
   try {
@@ -1309,8 +1318,8 @@ cron.schedule('*/10 * * * *', () => {
   checkAndTriggerFullSchedule();
 });
 
-const server = app.listen(PORT, () => {
-  logParser(`Server is running at port ${PORT}`);
+const server = app.listen(PORT, HOST, () => {
+  logParser(`Server is running at http://${HOST}:${PORT}`);
   
   if (fullScheduleCache) {
     logParser(`[Cache] Initial cache loaded with ${fullScheduleCache.length} entries.`);
@@ -1325,3 +1334,20 @@ server.on('error', (err) => {
   logParser(`Server failed to start: ${err.message}`, 'ERROR');
   process.exit(1);
 });
+
+// Обработка сигналов завершения процесса (graceful shutdown)
+function handleShutdown(signal) {
+  logParser(`Received ${signal}. Shutting down server gracefully...`, 'INFO');
+  server.close(() => {
+    try {
+      if (auth.db) auth.db.close();
+    } catch (e) {}
+    logParser('Server stopped cleanly.', 'INFO');
+    process.exit(0);
+  });
+}
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+
+// Экспорт app для совместимости с cPanel Node.js Selector (Phusion Passenger) на hoster.by
+module.exports = app;
