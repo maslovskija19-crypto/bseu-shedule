@@ -172,39 +172,15 @@
     .signature-gradient {
       background: linear-gradient(135deg, #4f59a4 0%, #b5bcff 100%);
     }
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-    .day-shifts-scrollbar::-webkit-scrollbar {
-      width: 4px;
-      height: 4px;
-    }
-    .day-shifts-scrollbar::-webkit-scrollbar-thumb {
-      background-color: rgba(79, 89, 164, 0.2);
-      border-radius: 4px;
-    }
-    .dark .day-shifts-scrollbar::-webkit-scrollbar-thumb {
-      background-color: rgba(181, 188, 255, 0.2);
-    }
-    .day-shifts-scrollbar {
-      scrollbar-width: thin;
-      scrollbar-color: rgba(79, 89, 164, 0.2) transparent;
-    }
-    *, *::before, *::after {
-      box-sizing: border-box;
-    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    *, *::before, *::after { box-sizing: border-box; }
     html, body {
-      margin: 0;
-      padding: 0;
-      overflow-x: hidden;
+      margin: 0; padding: 0; overflow-x: hidden;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     body {
-      min-height: 100vh;
-      min-height: -webkit-fill-available;
+      min-height: 100vh; min-height: -webkit-fill-available;
       padding-bottom: env(safe-area-inset-bottom, 0px);
     }
      main {
@@ -1223,6 +1199,12 @@
       display: none;
       -webkit-appearance: none;
     }
+    /* Центрирование текста в селектах валют */
+    #currency-select,
+    #salary-currency,
+    #job-currency {
+      text-align-last: center;
+    }
     /* Ведущая иконка внутри поля */
     .field-icon {
       color: #4f59a4;
@@ -1363,75 +1345,64 @@
     /* Вертикальная лента выбора времени смены (часы и минуты) */
     .vt-picker {
       display: flex;
-      gap: 8px;
+      gap: 6px;
     }
     .vt-col {
       position: relative;
       flex: 1 1 0;
-      max-height: 150px;
+      max-height: 128px;
       overflow-y: auto;
       scroll-snap-type: y mandatory;
-      border-radius: 12px;
-      background: rgba(79, 89, 164, 0.06);
-      padding: 56px 0;
+      border-radius: 10px;
+      background: rgba(79, 89, 164, 0.05);
+      padding: 44px 0;
       -ms-overflow-style: none;
       scrollbar-width: none;
+      cursor: grab;
     }
-    .dark .vt-col { background: rgba(181, 188, 255, 0.08); }
+    .vt-col:active {
+      cursor: grabbing;
+    }
+    .dark .vt-col { background: rgba(181, 188, 255, 0.07); }
     .vt-col::-webkit-scrollbar { display: none; }
-    /* Полоса-индикатор выбора по центру */
-    .vt-col::before {
-      content: "";
-      position: absolute;
-      left: 5px;
-      right: 5px;
-      top: 50%;
-      transform: translateY(-50%);
-      height: 34px;
-      border-radius: 10px;
-      background: rgba(79, 89, 164, 0.14);
-      box-shadow: inset 0 0 0 1px rgba(79, 89, 164, 0.18);
-      pointer-events: none;
-    }
-    .dark .vt-col::before {
-      background: rgba(181, 188, 255, 0.16);
-      box-shadow: inset 0 0 0 1px rgba(181, 188, 255, 0.20);
-    }
     .vt-chip {
       display: block;
       width: 100%;
       text-align: center;
-      padding: 8px 0;
+      padding: 5px 0;
       scroll-snap-align: center;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       font-variant-numeric: tabular-nums;
-      line-height: 1;
+      line-height: 1.1;
       color: #4f59a4;
       cursor: pointer;
-      transition: color 0.15s ease, font-size 0.15s ease, transform 0.15s ease;
+      transition: color 0.12s ease, font-size 0.12s ease, transform 0.12s ease, background-color 0.12s ease;
       -webkit-tap-highlight-color: transparent;
+      outline: none;
+      border: none;
+      background: transparent;
+      border-radius: 7px;
     }
     .dark .vt-chip { color: #b5bcff; }
     .vt-chip.vt-selected {
       background: #4f59a4;
       color: #ffffff;
-      font-size: 17px;
+      font-size: 15px;
       font-weight: 800;
-      border-radius: 9px;
+      box-shadow: 0 0 0 1px rgba(79, 89, 164, 0.35);
     }
     .dark .vt-chip.vt-selected { background: #4f59a4; color: #ffffff; }
 
     /* Компактная лента для поповера у ячейки */
-    .vt-picker.vt-compact { gap: 6px; }
+    .vt-picker.vt-compact { gap: 5px; }
     .vt-picker.vt-compact .vt-col {
-      max-height: 104px;
-      padding: 40px 0;
-      border-radius: 10px;
+      max-height: 90px;
+      padding: 32px 0;
+      border-radius: 8px;
     }
-    .vt-picker.vt-compact .vt-col::before { height: 26px; border-radius: 8px; left: 4px; right: 4px; }
-    .vt-picker.vt-compact .vt-chip { font-size: 12px; padding: 6px 0; }
-    .vt-picker.vt-compact .vt-chip.vt-selected { font-size: 15px; border-radius: 8px; }
+    .vt-picker.vt-compact .vt-chip { font-size: 11px; padding: 4px 0; }
+    .vt-picker.vt-compact .vt-chip.vt-selected { font-size: 13px; border-radius: 6px; }
 
     /* Вертикальная лента выбора времени — оптимизация для смартфонов */
     @media (max-width: 480px) {
@@ -1439,21 +1410,16 @@
         gap: 4px;
       }
       .vt-col {
-        max-height: 120px;
-        padding: 40px 0;
-        border-radius: 10px;
-      }
-      .vt-col::before {
-        height: 26px;
-        left: 3px;
-        right: 3px;
+        max-height: 108px;
+        padding: 34px 0;
+        border-radius: 8px;
       }
       .vt-chip {
-        font-size: 12px;
-        padding: 6px 0;
+        font-size: 11px;
+        padding: 4px 0;
       }
       .vt-chip.vt-selected {
-        font-size: 15px;
+        font-size: 13px;
       }
     }
 
@@ -1462,27 +1428,30 @@
       width: 100%;
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
-      border-radius: 12px;
-      background: rgba(79, 89, 164, 0.06);
-      border: 1px solid rgba(172, 179, 183, 0.18);
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 10px;
+      background: rgba(79, 89, 164, 0.05);
+      border: 1px solid rgba(172, 179, 183, 0.16);
       color: #2d3337;
       cursor: pointer;
-      transition: background-color 0.15s ease, border-color 0.15s ease;
+      transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.1s ease;
     }
     .dark .time-field-trigger {
-      background: rgba(181, 188, 255, 0.08);
-      border-color: rgba(51, 65, 85, 0.6);
+      background: rgba(181, 188, 255, 0.07);
+      border-color: rgba(51, 65, 85, 0.55);
       color: #e2e8f0;
     }
     .time-field-trigger:hover {
-      border-color: rgba(79, 89, 164, 0.5);
-      background: rgba(79, 89, 164, 0.10);
+      border-color: rgba(79, 89, 164, 0.45);
+      background: rgba(79, 89, 164, 0.09);
     }
     .dark .time-field-trigger:hover {
-      border-color: rgba(181, 188, 255, 0.5);
-      background: rgba(181, 188, 255, 0.14);
+      border-color: rgba(181, 188, 255, 0.45);
+      background: rgba(181, 188, 255, 0.12);
+    }
+    .time-field-trigger:active {
+      transform: scale(0.98);
     }
     .time-field-trigger:focus-visible {
       outline: 2px solid #4f59a4;
@@ -2134,19 +2103,20 @@
          <button id="close-income-settings-btn" class="text-on-surface-variant dark:text-slate-200 hover:text-on-surface hover:bg-on-surface/10 dark:hover:bg-slate-700/50 rounded-full w-7 h-7 flex items-center justify-center text-xl sm:text-2xl leading-none cursor-pointer transition-all">&times;</button>
       </div>
       
-      <div class="mb-3 sm:mb-4 grid grid-cols-2 gap-2 sm:gap-4">
-        <div>
-          <label for="currency-select" class="block text-[10px] font-bold text-on-surface-variant/80 dark:text-slate-400 uppercase tracking-wider mb-1 sm:mb-2">Валюта</label>
-          <select id="currency-select" class="w-full text-sm sm:text-base md:text-xs bg-surface-container-low dark:bg-slate-800 border-none rounded-xl py-2 sm:py-2.5 px-2 sm:px-3 font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary">
-            <option value="BYN">BYN</option><option value="RUB">RUB</option><option value="USD">USD</option><option value="EUR">EUR</option>
-          </select>
-        </div>
-      </div>
+       <div class="mb-3 sm:mb-4 grid grid-cols-3 gap-1 sm:gap-2">
+         <div>
+            <label for="currency-select" class="block text-[10px] font-bold text-on-surface-variant/80 dark:text-slate-400 uppercase tracking-wider mb-1 sm:mb-2 whitespace-nowrap">Основная валюта</label>
+           <select id="currency-select" class="w-full text-sm sm:text-base md:text-xs bg-surface-container-low dark:bg-slate-800 border-none rounded-xl py-2 sm:py-2.5 pl-2 sm:pl-3 pr-[22px] font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary">
+             <option value="BYN">BYN</option><option value="RUB">RUB</option><option value="USD">USD</option><option value="EUR">EUR</option>
+           </select>
+         </div>
+         <div class="col-span-2"></div>
+       </div>
 
       <div class="mb-4 sm:mb-6 bg-primary/5 dark:bg-[#b5bcff]/5 p-3 sm:p-4 rounded-2xl border border-primary/10 dark:border-[#b5bcff]/10">
-        <label class="block text-[10px] font-bold text-primary dark:text-[#b5bcff] uppercase tracking-wider mb-1 sm:mb-2">Фиксированный оклад</label>
+         <label id="salary-period-label" class="block text-[10px] font-bold text-primary dark:text-[#b5bcff] uppercase tracking-wider mb-1 sm:mb-2">Фиксированный оклад</label>
           <div class="grid grid-cols-3 gap-1 sm:gap-2 items-center">
-            <select id="salary-currency" class="w-full text-sm sm:text-base md:text-xs bg-surface-container-lowest dark:bg-slate-800 border border-outline-variant/10 dark:border-slate-700 rounded-xl py-2 sm:py-2.5 px-1 sm:px-2 font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary text-center">
+            <select id="salary-currency" class="w-full text-sm sm:text-base md:text-xs bg-surface-container-lowest dark:bg-slate-800 border border-outline-variant/10 dark:border-slate-700 rounded-xl py-2 sm:py-2.5 pl-1 sm:pl-2 pr-[22px] font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary">
               <option value="BYN">BYN</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="RUB">RUB</option>
             </select>
             <div class="col-span-2 relative flex items-center">
@@ -2172,7 +2142,7 @@
           <input type="text" id="job-name" placeholder="Название работы" required class="w-full text-sm sm:text-base md:text-sm bg-surface-container-low dark:bg-slate-800 border-none rounded-xl py-2 sm:py-2.5 px-3 sm:px-4 font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary">
         </div>
         <div class="grid grid-cols-3 gap-1 sm:gap-2">
-          <select id="job-currency" class="w-full text-sm sm:text-base md:text-xs bg-surface-container-low dark:bg-slate-800 border-none rounded-xl py-2 sm:py-2.5 px-1 sm:px-2 font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary">
+          <select id="job-currency" class="w-full text-sm sm:text-base md:text-xs bg-surface-container-low dark:bg-slate-800 border-none rounded-xl py-2 sm:py-2.5 pl-1 sm:pl-2 pr-[22px] font-semibold text-on-surface dark:text-slate-200 focus:ring-2 focus:ring-primary">
             <option value="BYN">BYN</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="RUB">RUB</option>
           </select>
           <div class="col-span-2 relative flex items-center">

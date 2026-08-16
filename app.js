@@ -680,6 +680,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (window.isInIncomeMode && typeof exitIncomeMode === "function") {
       exitIncomeMode();
     }
+    if (typeof closeIncomeSettings === "function") {
+      closeIncomeSettings();
+    }
     isDefaultGroupActive = false; // переключение таба сбрасывает режим основной группы
     updateDefaultGroupModeClass();
     setDefaultGroupActiveState(false);
@@ -4020,6 +4023,9 @@ card.innerHTML = `
   // Кнопка "Моя группа по умолчанию" (звезда) — возврат к основной группе.
   // Доступна и на ПК (в мобильной нижней панели ей соответствует bottom-default-group-btn).
   function selectDefaultGroup() {
+    if (typeof closeIncomeSettings === "function") {
+      closeIncomeSettings();
+    }
     document.querySelectorAll('.mobile-bottom-nav-btn').forEach(btn => btn.classList.remove('active'));
     const bottomDefaultBtn = document.getElementById('bottom-default-group-btn');
     if (bottomDefaultBtn) bottomDefaultBtn.classList.add('active');
@@ -4147,6 +4153,9 @@ card.innerHTML = `
   };
 
   navEditGroup.addEventListener("click", () => {
+    if (typeof closeIncomeSettings === "function") {
+      closeIncomeSettings();
+    }
     window.openEditGroupModal();
   });
 
@@ -4340,6 +4349,7 @@ card.innerHTML = `
   const currencySelect = document.getElementById("currency-select");
   const salaryCurrency = document.getElementById("salary-currency");
   const salaryAmount = document.getElementById("salary-amount");
+  const salaryPeriodLabel = document.getElementById("salary-period-label");
   const jobForm = document.getElementById("job-form");
   const jobName = document.getElementById("job-name");
   const jobCurrency = document.getElementById("job-currency");
@@ -4746,6 +4756,10 @@ card.innerHTML = `
   // Настройки Доходов
   function openIncomeSettings() { 
     syncSalaryInputs();
+    if (salaryPeriodLabel) {
+      const month = incomeGlobalDate.getMonth();
+      salaryPeriodLabel.innerText = `Фиксированный оклад за ${incomeMonths[month]}`;
+    }
     incomeSettingsModal.classList.remove('hidden', 'opacity-0');
     incomeSettingsModal.classList.add('flex', 'opacity-100');
     incomeSettingsModal.querySelector("div").classList.remove("scale-95");
@@ -4812,20 +4826,15 @@ card.innerHTML = `
       if (modalIntersectionMuted) modalIntersectionMuted.classList.add("hidden");
     }
 
-    shiftModal.classList.remove('hidden', 'opacity-0');
-    shiftModal.classList.add('flex', 'opacity-100');
-    shiftModal.querySelector("div").classList.remove("scale-95");
-    shiftModal.querySelector("div").classList.add("scale-100");
+     shiftModal.classList.remove('hidden', 'opacity-0');
+     shiftModal.classList.add('flex', 'opacity-100');
+     shiftModal.querySelector("div").classList.remove("scale-95");
+     shiftModal.querySelector("div").classList.add("scale-100");
 
-    requestAnimationFrame(() => {
-      syncVerticalTimePicker();
-      // Повторная синхронизация после применения раскладки модалки,
-      // чтобы ползунок встал точно на значение и «00» не подсвечивалось без него.
-      requestAnimationFrame(syncVerticalTimePicker);
-    });
-  }
+     syncWhenReady(shiftModal);
+   }
 
-  function closeShiftModal() {
+   function closeShiftModal() {
     shiftModal.classList.remove('opacity-100');
     shiftModal.classList.add('opacity-0');
     shiftModal.querySelector("div").classList.remove("scale-100");
@@ -4854,50 +4863,96 @@ card.innerHTML = `
           chip.dataset.val = val;
           chip.textContent = pad2(val);
           chip.addEventListener('click', () => {
-            col.scrollTo({ top: chip.offsetTop - col.clientHeight / 2 + chip.offsetHeight / 2, behavior: 'smooth' });
+            const val = parseInt(chip.dataset.val, 10);
+            const hidden = document.getElementById(picker.dataset.input);
+            if (!hidden) return;
+            const [hh, mm] = hidden.value.split(':').map(Number);
+            if (kind === 'hour') {
+              hidden.value = `${pad2(val)}:${pad2(mm)}`;
+            } else {
+              hidden.value = `${pad2(hh)}:${pad2(val)}`;
+            }
+            col.scrollTo({ top: chip.offsetTop - col.clientHeight / 2 + chip.offsetHeight / 2, behavior: 'auto' });
+            updateVtCol(col, picker);
           });
           col.appendChild(chip);
         }
         col.addEventListener('scroll', () => {
           if (col._raf) cancelAnimationFrame(col._raf);
-          col._raf = requestAnimationFrame(() => updateVtCol(col, picker));
+          col._raf = requestAnimationFrame(() => {
+            const chips = Array.from(col.querySelectorAll('.vt-chip'));
+            if (!chips.length) return;
+            const center = col.scrollTop + col.clientHeight / 2;
+            let best = chips[0];
+            let bestDist = Infinity;
+            chips.forEach(c => {
+              const cCenter = c.offsetTop + c.offsetHeight / 2;
+              const d = Math.abs(cCenter - center);
+              if (d < bestDist) { bestDist = d; best = c; }
+            });
+            const isHour = col.classList.contains('vt-hours');
+            const hidden = document.getElementById(picker.dataset.input);
+            if (!hidden) return;
+            let hh = 0, mm = 0;
+            if (hidden.value) {
+              [hh, mm] = hidden.value.split(':').map(Number);
+            }
+            if (isHour) hh = parseInt(best.dataset.val, 10);
+            else mm = parseInt(best.dataset.val, 10);
+            hidden.value = `${pad2(hh)}:${pad2(mm)}`;
+            updateVtCol(col, picker);
+          });
+        });
+
+        col.addEventListener('mousedown', (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          dragVtCol = col;
+          dragVtStartY = e.clientY;
+          dragVtStartScroll = col.scrollTop;
+          col.style.cursor = 'grabbing';
+          col.style.userSelect = 'none';
+          col.style.scrollSnapType = 'none';
         });
       });
     });
   }
 
+  let dragVtCol = null;
+  let dragVtStartY = 0;
+  let dragVtStartScroll = 0;
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragVtCol) return;
+    const dy = dragVtStartY - e.clientY;
+    dragVtCol.scrollTop = dragVtStartScroll + dy;
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragVtCol) return;
+    dragVtCol.style.cursor = '';
+    dragVtCol.style.userSelect = '';
+    dragVtCol.style.scrollSnapType = '';
+    dragVtCol = null;
+  });
+
   function updateVtCol(col, picker) {
     const chips = Array.from(col.querySelectorAll('.vt-chip'));
     if (!chips.length) return;
-    // Принудительно сбрасываем раскладку, чтобы clientHeight/scrollTop
-    // соответствовали фактическому (видимому) положению ленты-ползунка.
-    // Иначе при первом показе колонка может остаться на 00 подсвеченной,
-    // пока ползунок находится на другом значении.
-    void col.offsetHeight;
-    const center = col.scrollTop + col.clientHeight / 2;
-    let best = chips[0];
-    let bestDist = Infinity;
-    chips.forEach(c => {
-      const cCenter = c.offsetTop + c.offsetHeight / 2;
-      const d = Math.abs(cCenter - center);
-      if (d < bestDist) { bestDist = d; best = c; }
-    });
     const isHour = col.classList.contains('vt-hours');
     const hidden = document.getElementById(picker.dataset.input);
-    let [hh, mm] = (hidden.value || '00:00').split(':').map(Number);
-    if (isHour) hh = parseInt(best.dataset.val, 10);
-    else mm = parseInt(best.dataset.val, 10);
-    hidden.value = `${pad2(hh)}:${pad2(mm)}`;
+    if (!hidden) return;
+    // Only highlight if the hidden input has a valid value; don't default to '00:00'
+    const selectedVal = hidden.value ? (isHour ? parseInt(hidden.value.split(':')[0], 10) : parseInt(hidden.value.split(':')[1], 10)) : -1;
+
     chips.forEach(c => {
-      c.classList.remove('vt-selected');
+      c.classList.toggle('vt-selected', Number(c.dataset.val) === selectedVal);
     });
-    const selectedVal = isHour ? hh : mm;
-    const matchingChip = chips.find(c => Number(c.dataset.val) === selectedVal);
-    if (matchingChip) matchingChip.classList.add('vt-selected');
+
     const dispId = picker.dataset.display;
     if (dispId) {
       const disp = document.getElementById(dispId);
-      if (disp) disp.textContent = hidden.value;
+      if (disp) disp.textContent = hidden.value || '';
     }
   }
 
@@ -4905,9 +4960,27 @@ card.innerHTML = `
     if (!pickerEl) return;
     const hidden = document.getElementById(pickerEl.dataset.input);
     if (!hidden) return;
+    const hoursCol = pickerEl.querySelector('.vt-hours');
+    const minsCol = pickerEl.querySelector('.vt-mins');
+    if (!hidden.value) {
+      if (hoursCol) updateVtCol(hoursCol, pickerEl);
+      if (minsCol) updateVtCol(minsCol, pickerEl);
+      return;
+    }
     const [hh, mm] = hidden.value.split(':').map(Number);
-    setVtCenter(pickerEl.querySelector('.vt-hours'), hh);
-    setVtCenter(pickerEl.querySelector('.vt-mins'), mm);
+    setVtCenter(hoursCol, hh);
+    setVtCenter(minsCol, mm);
+    const hoursChip = hoursCol ? hoursCol.querySelector('.vt-selected') : null;
+    const minsChip = minsCol ? minsCol.querySelector('.vt-selected') : null;
+    if (hoursChip && minsChip && hoursCol && minsCol) {
+      const hoursRect = hoursChip.getBoundingClientRect();
+      const minsRect = minsChip.getBoundingClientRect();
+      const diff = hoursRect.top - minsRect.top;
+      if (Math.abs(diff) > 0.5) {
+        minsCol.scrollTop = Math.max(0, minsCol.scrollTop + diff);
+        updateVtCol(minsCol, pickerEl);
+      }
+    }
   }
 
   function syncVerticalTimePicker() {
@@ -4915,22 +4988,62 @@ card.innerHTML = `
       if (picker.offsetParent === null) return; // скрытая лента — пропускаем
       const hidden = document.getElementById(picker.dataset.input);
       if (!hidden) return;
-      const [hh, mm] = hidden.value.split(':').map(Number);
-      setVtCenter(picker.querySelector('.vt-hours'), hh);
-      setVtCenter(picker.querySelector('.vt-mins'), mm);
-    });
-  }
+      const [hh, mm] = (hidden.value || '00:00').split(':').map(Number);
+      const hoursCol = picker.querySelector('.vt-hours');
+      const minsCol = picker.querySelector('.vt-mins');
+      setVtCenter(hoursCol, hh);
+      setVtCenter(minsCol, mm);
 
-  function setVtCenter(col, val) {
+      const hoursChip = hoursCol ? hoursCol.querySelector('.vt-selected') : null;
+      const minsChip = minsCol ? minsCol.querySelector('.vt-selected') : null;
+      if (hoursChip && minsChip && hoursCol && minsCol) {
+        const hoursRect = hoursChip.getBoundingClientRect();
+        const minsRect = minsChip.getBoundingClientRect();
+        const diff = hoursRect.top - minsRect.top;
+        if (Math.abs(diff) > 0.5) {
+          minsCol.scrollTop = Math.max(0, minsCol.scrollTop + diff);
+          updateVtCol(minsCol, picker);
+        }
+      }
+     });
+   }
+
+   let syncTimer = null;
+
+   function syncWhenReady(target) {
+     clearTimeout(syncTimer);
+     let attempts = 0;
+     function tick() {
+       // NOTE: target is position:fixed, so offsetParent is ALWAYS null even when
+       // visible. Use offsetHeight (forced layout) which is > 0 only when the
+       // element is actually rendered (not display:none).
+       if (target && target.offsetHeight > 0) {
+         requestAnimationFrame(() => {
+           requestAnimationFrame(() => {
+             syncVerticalTimePicker();
+             requestAnimationFrame(syncVerticalTimePicker);
+           });
+         });
+         return;
+       }
+       attempts++;
+       if (attempts > 25) {
+         syncVerticalTimePicker();
+         return;
+       }
+       syncTimer = setTimeout(tick, 300);
+     }
+     tick();
+   }
+
+   function setVtCenter(col, val) {
     if (!col) return;
-    updateVtCol(col, col.closest('.vt-picker')); // сначала снимаем старое выделение по актуальной геометрии
+    updateVtCol(col, col.closest('.vt-picker'));
     const chip = col.querySelector(`.vt-chip[data-val="${val}"]`);
     if (chip) {
-      // Гарантируем актуальную геометрию перед расчётом целевой прокрутки
       void col.offsetHeight;
-      col.scrollTop = chip.offsetTop - col.clientHeight / 2 + chip.offsetHeight / 2;
-      // После установки прокрутки ещё раз пересчитываем выделение,
-      // чтобы «табличка» легла ровно под центральную ленту (ползунок).
+      const target = chip.offsetTop - col.clientHeight / 2 + chip.offsetHeight / 2;
+      col.scrollTop = Math.max(0, target);
       void col.offsetHeight;
     }
     updateVtCol(col, col.closest('.vt-picker'));
@@ -5279,10 +5392,12 @@ card.innerHTML = `
         card.classList.remove('scale-95');
         card.classList.add('scale-100');
       }
-    }
-  }
+     }
 
-  function closeIncomeDayModal() {
+     syncWhenReady(incomeDayModal);
+   }
+
+   function closeIncomeDayModal() {
     if (incomeDayModal) {
       incomeDayModal.classList.remove('opacity-100');
       incomeDayModal.classList.add('opacity-0');
@@ -5437,6 +5552,9 @@ card.innerHTML = `
     const activeKey = getPeriodKey(incomeGlobalDate);
     
     incomeMonthLabel.innerText = `${pad(range.start.getDate())}.${pad(range.start.getMonth()+1)} - ${pad(range.end.getDate())}.${pad(range.end.getMonth()+1)}`;
+    if (salaryPeriodLabel) {
+      salaryPeriodLabel.innerText = `Фиксированный оклад за ${incomeMonths[month]}`;
+    }
     graphCurrencyBadge.innerText = `(${incomeCurrentCurrency})`;
 
     const periodShifts = incomeShifts.filter(s => {
@@ -5625,6 +5743,10 @@ card.innerHTML = `
     renderDayShiftsList(dateStr);
     if (currentPopoverDate && currentPopoverDate === dateStr) {
       renderPopoverDayShifts(dateStr);
+    }
+    if (incomeDayModal && !incomeDayModal.classList.contains('hidden') && incomeDayModalDate === dateStr) {
+      const updatedDayShifts = incomeShifts.filter(s => s.date === dateStr);
+      renderIncomeDayShiftsList(updatedDayShifts);
     }
     saveIncomeData();
   };
@@ -6482,13 +6604,19 @@ if (installBtn) {
       accountSubmitLabel.textContent = 'Создать';
       accountToggleMode.textContent = 'Уже есть аккаунт? Войти';
       accountPassword.setAttribute('autocomplete', 'new-password');
+      accountPassword.setAttribute('minlength', '6');
+      accountPassword.setAttribute('placeholder', 'Не менее 6 символов');
       accountLogin.setAttribute('autocomplete', 'off');
+      accountLogin.setAttribute('placeholder', 'Придумайте логин (от 3 до 30 символов)');
     } else {
       accountModalTitle.textContent = 'Вход в аккаунт';
       accountSubmitLabel.textContent = 'Войти';
       accountToggleMode.textContent = 'Нет аккаунта? Создать';
       accountPassword.setAttribute('autocomplete', 'current-password');
+      accountPassword.setAttribute('minlength', '4');
+      accountPassword.setAttribute('placeholder', 'Пароль');
       accountLogin.setAttribute('autocomplete', 'off');
+      accountLogin.setAttribute('placeholder', 'Логин');
     }
     if (accountError) accountError.classList.add('hidden');
   }
@@ -6516,34 +6644,53 @@ if (installBtn) {
   }
 
   // Отправка формы НАТИВНО (без preventDefault) в скрытый iframe.
-  // Это гарантирует, что встроенный менеджер паролей предложит сохранить
-  // учётные данные во ВСЕХ браузерах (Google/Chrome, Firefox, Safari, Edge,
-  // Brave, Opera и др.), а не только там, где есть Credential Management API.
-  // Сама навигация не происходит (iframe скрыт), а SPA-состояние и данные
-  // обновляются после ответа сервера (onload iframe) через checkSession().
   const accountIframe = document.getElementById('account-form-iframe');
   let accountSubmitting = false;
   if (accountForm) {
     accountForm.addEventListener('submit', (e) => {
       const login = accountLogin.value.trim();
       const password = accountPassword.value;
-      if (login.length < 3 || password.length < 4) {
-        e.preventDefault();
-        accountError.textContent = 'Логин (от 3 символов) и пароль (от 4 символов) обязательны.';
-        accountError.classList.remove('hidden');
-        return;
+      
+      if (accountMode === 'register') {
+        if (login.length < 3 || login.length > 30) {
+          e.preventDefault();
+          accountError.textContent = 'Логин должен содержать от 3 до 30 символов.';
+          accountError.classList.remove('hidden');
+          return;
+        }
+        if (!/^[a-zA-Z0-9_\-\.]+$/i.test(login)) {
+          e.preventDefault();
+          accountError.textContent = 'Логин может содержать только буквы, цифры, дефисы и подчёркивания.';
+          accountError.classList.remove('hidden');
+          return;
+        }
+        if (password.length < 6) {
+          e.preventDefault();
+          accountError.textContent = 'Пароль для нового аккаунта должен быть не менее 6 символов.';
+          accountError.classList.remove('hidden');
+          return;
+        }
+      } else {
+        if (login.length < 3 || password.length < 4) {
+          e.preventDefault();
+          accountError.textContent = 'Введите логин и пароль.';
+          accountError.classList.remove('hidden');
+          return;
+        }
       }
-      // Валидно — даём форме уйти нативно (триггер менеджера паролей).
+      
+      // Валидно — показываем индикатор загрузки и отправляем нативно
       if (accountError) accountError.classList.add('hidden');
       accountSubmitting = true;
+      accountSubmitLabel.textContent = accountMode === 'register' ? 'Создание...' : 'Вход...';
     });
   }
   // После ответа сервера в iframe — обновляем SPA-состояние и данные.
   if (accountIframe) {
     accountIframe.addEventListener('load', () => {
+      accountSubmitLabel.textContent = accountMode === 'register' ? 'Создать' : 'Войти';
       if (!accountSubmitting) return;
       accountSubmitting = false;
-      // Считываем тело ответа из iframe, чтобы показать ошибку при необходимости.
       let data = {};
       try {
         const doc = accountIframe.contentDocument || accountIframe.contentWindow.document;
@@ -6554,10 +6701,7 @@ if (installBtn) {
         currentUser = { login: data.user ? data.user.login : accountLogin.value.trim() };
         refreshMenu();
         closeModal(accountModal);
-        // Сверяем локальные данные с сервером (last-write-wins) и отправляем
-        // локальные, которых ещё нет на сервере.
         bootstrapSync();
-        // Дополнительно: Credential Management API, если браузер поддерживает.
         if (navigator.credentials && navigator.credentials.store && window.PasswordCredential) {
           try {
             navigator.credentials.store(new window.PasswordCredential({

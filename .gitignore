@@ -1,2 +1,10 @@
 # File-based API cache (server)
 .cache/
+
+# Encrypted Account storage
+accounts/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
