@@ -601,3 +601,8 @@
 [2026-08-16 08:52:32] [INFO] [Cache] Loaded cache from file: D:\VS\fullScheduleCache.json (21409 items)
 [2026-08-16 08:52:32] [INFO] Server is running at http://0.0.0.0:3000
 [2026-08-16 08:52:32] [INFO] [Cache] Initial cache loaded with 21409 entries.
+[2026-08-16 11:18:31] [INFO] [Cache] Loaded cache from file: D:\VS\fullScheduleCache.json (21409 items)
+[2026-08-16 11:18:31] [INFO] Server is running at http://0.0.0.0:3000
+[2026-08-16 11:18:31] [INFO] [Cache] Initial cache loaded with 21409 entries.
+[2026-08-16 11:18:31] [INFO] [FullSchedule] Triggering background full schedule crawl (interval >= 10m or initial run)...
+[2026-08-16 11:18:31] [INFO] [FullSchedule] Starting complete university schedule background crawl...
